@@ -1,5 +1,4 @@
 import os
-import sqlite3
 import hashlib
 import secrets
 from datetime import datetime
@@ -12,92 +11,174 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dtnlamkhe-secret-change-in-production')
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
-DATABASE = os.path.join(os.path.dirname(__file__), 'database.db')
+
+DATABASE_URL = os.environ.get('DATABASE_URL', '')
+if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
+    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+
+LOCAL_DB = os.path.join(os.path.dirname(__file__), 'database.db')
 
 
 def get_db():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    conn.execute('PRAGMA foreign_keys = ON')
-    return conn
+    if DATABASE_URL:
+        import psycopg2
+        import psycopg2.extras
+        conn = psycopg2.connect(DATABASE_URL)
+        conn.row_factory = psycopg2.extras.RealDictCursor
+        return conn
+    else:
+        import sqlite3
+        conn = sqlite3.connect(LOCAL_DB)
+        conn.row_factory = sqlite3.Row
+        conn.execute('PRAGMA foreign_keys = ON')
+        return conn
+
+
+def is_pg():
+    return bool(DATABASE_URL)
 
 
 def init_db():
     conn = get_db()
-    conn.executescript('''
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            role TEXT DEFAULT 'user',
-            score INTEGER DEFAULT 0
-        );
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            description TEXT DEFAULT '',
-            status TEXT DEFAULT 'pending',
-            priority TEXT DEFAULT 'medium',
-            due_date TEXT,
-            max_assignees INTEGER DEFAULT 3,
-            points INTEGER DEFAULT 0,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            created_by INTEGER,
-            FOREIGN KEY (created_by) REFERENCES users(id)
-        );
-        CREATE TABLE IF NOT EXISTS task_assignments (
-            task_id INTEGER NOT NULL,
-            user_id INTEGER NOT NULL,
-            PRIMARY KEY (task_id, user_id),
-            FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
-            FOREIGN KEY (user_id) REFERENCES users(id)
-        );
-        CREATE TABLE IF NOT EXISTS points_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            points INTEGER NOT NULL,
-            reason TEXT DEFAULT '',
-            task_id INTEGER,
-            created_by INTEGER,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id),
-            FOREIGN KEY (task_id) REFERENCES tasks(id),
-            FOREIGN KEY (created_by) REFERENCES users(id)
-        );
-        CREATE TABLE IF NOT EXISTS finance (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            type TEXT NOT NULL,
-            amount REAL NOT NULL,
-            description TEXT DEFAULT '',
-            category TEXT DEFAULT '',
-            date TEXT DEFAULT CURRENT_TIMESTAMP,
-            created_by INTEGER,
-            FOREIGN KEY (created_by) REFERENCES users(id)
-        );
-        CREATE TABLE IF NOT EXISTS fund (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL DEFAULT 'Quỹ chung',
-            balance REAL DEFAULT 0,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-        );
-    ''')
-    admin = conn.execute('SELECT id FROM users WHERE username = ?', ('admin',)).fetchone()
+    cur = conn.cursor()
+
+    if is_pg():
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT DEFAULT 'user',
+                score INTEGER DEFAULT 0
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS tasks (
+                id SERIAL PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                status TEXT DEFAULT 'pending',
+                priority TEXT DEFAULT 'medium',
+                due_date TEXT,
+                max_assignees INTEGER DEFAULT 3,
+                points INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh'),
+                created_by INTEGER REFERENCES users(id)
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS task_assignments (
+                task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id),
+                PRIMARY KEY (task_id, user_id)
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS points_log (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                points INTEGER NOT NULL,
+                reason TEXT DEFAULT '',
+                task_id INTEGER REFERENCES tasks(id),
+                created_by INTEGER REFERENCES users(id),
+                created_at TEXT DEFAULT (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS finance (
+                id SERIAL PRIMARY KEY,
+                type TEXT NOT NULL,
+                amount REAL NOT NULL,
+                description TEXT DEFAULT '',
+                category TEXT DEFAULT '',
+                date TEXT DEFAULT (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh'),
+                created_by INTEGER REFERENCES users(id)
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS fund (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL DEFAULT 'Quỹ chung',
+                balance REAL DEFAULT 0,
+                updated_at TEXT DEFAULT (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')
+            )
+        ''')
+    else:
+        cur.executescript('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT DEFAULT 'user',
+                score INTEGER DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                status TEXT DEFAULT 'pending',
+                priority TEXT DEFAULT 'medium',
+                due_date TEXT,
+                max_assignees INTEGER DEFAULT 3,
+                points INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                created_by INTEGER,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            );
+            CREATE TABLE IF NOT EXISTS task_assignments (
+                task_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                PRIMARY KEY (task_id, user_id),
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            );
+            CREATE TABLE IF NOT EXISTS points_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                points INTEGER NOT NULL,
+                reason TEXT DEFAULT '',
+                task_id INTEGER,
+                created_by INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                FOREIGN KEY (task_id) REFERENCES tasks(id),
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            );
+            CREATE TABLE IF NOT EXISTS finance (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT NOT NULL,
+                amount REAL NOT NULL,
+                description TEXT DEFAULT '',
+                category TEXT DEFAULT '',
+                date TEXT DEFAULT CURRENT_TIMESTAMP,
+                created_by INTEGER,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            );
+            CREATE TABLE IF NOT EXISTS fund (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL DEFAULT 'Quỹ chung',
+                balance REAL DEFAULT 0,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+        ''')
+
+    admin = cur.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()
     if not admin:
         pw = hashlib.sha256('admin123'.encode()).hexdigest()
-        conn.execute('INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
+        cur.execute("INSERT INTO users (username, password, role) VALUES (%s, %s, %s)" if is_pg() else
+                     "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
                      ('admin', pw, 'admin'))
-    try:
-        conn.execute('SELECT max_assignees FROM tasks LIMIT 1')
-    except Exception:
-        conn.execute('ALTER TABLE tasks ADD COLUMN max_assignees INTEGER DEFAULT 3')
-    try:
-        conn.execute('SELECT score FROM users LIMIT 1')
-    except Exception:
-        conn.execute('ALTER TABLE users ADD COLUMN score INTEGER DEFAULT 0')
-    try:
-        conn.execute('SELECT points FROM tasks LIMIT 1')
-    except Exception:
-        conn.execute('ALTER TABLE tasks ADD COLUMN points INTEGER DEFAULT 0')
+
+    if not is_pg():
+        try:
+            cur.execute('SELECT score FROM users LIMIT 1')
+        except Exception:
+            cur.execute('ALTER TABLE users ADD COLUMN score INTEGER DEFAULT 0')
+        try:
+            cur.execute('SELECT points FROM tasks LIMIT 1')
+        except Exception:
+            cur.execute('ALTER TABLE tasks ADD COLUMN points INTEGER DEFAULT 0')
+
     conn.commit()
     conn.close()
 
@@ -128,32 +209,8 @@ def admin_required(f):
     return decorated
 
 
-def migrate_db():
-    conn = get_db()
-    try:
-        conn.execute('SELECT assigned_to FROM tasks LIMIT 1')
-        tasks = conn.execute('SELECT id, assigned_to FROM tasks WHERE assigned_to IS NOT NULL').fetchall()
-        for t in tasks:
-            conn.execute('INSERT OR IGNORE INTO task_assignments (task_id, user_id) VALUES (?, ?)',
-                         (t['id'], t['assigned_to']))
-        conn.execute('ALTER TABLE tasks DROP COLUMN assigned_to')
-        conn.commit()
-    except Exception:
-        pass
-    try:
-        conn.execute('SELECT max_assignees FROM tasks LIMIT 1')
-    except Exception:
-        conn.execute('ALTER TABLE tasks ADD COLUMN max_assignees INTEGER DEFAULT 3')
-    try:
-        conn.execute('SELECT score FROM users LIMIT 1')
-    except Exception:
-        conn.execute('ALTER TABLE users ADD COLUMN score INTEGER DEFAULT 0')
-    try:
-        conn.execute('SELECT points FROM tasks LIMIT 1')
-    except Exception:
-        conn.execute('ALTER TABLE tasks ADD COLUMN points INTEGER DEFAULT 0')
-    conn.commit()
-    conn.close()
+def q(sql_pg, sql_lite):
+    return sql_pg if is_pg() else sql_lite
 
 
 # ==================== PAGE ROUTES ====================
@@ -195,13 +252,15 @@ def api_register():
         return jsonify({'error': 'Password phải có ít nhất 4 ký tự'}), 400
 
     conn = get_db()
-    existing = conn.execute('SELECT id FROM users WHERE username = ?', (username,)).fetchone()
+    cur = conn.cursor()
+    existing = cur.execute(q("SELECT id FROM users WHERE username = %s", "SELECT id FROM users WHERE username = ?"), (username,)).fetchone()
     if existing:
         conn.close()
         return jsonify({'error': 'Username đã tồn tại'}), 400
 
-    conn.execute('INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
-                 (username, hash_password(password), 'user'))
+    cur.execute(q("INSERT INTO users (username, password, role) VALUES (%s, %s, %s)",
+                  "INSERT INTO users (username, password, role) VALUES (?, ?, ?)"),
+                (username, hash_password(password), 'user'))
     conn.commit()
     conn.close()
     return jsonify({'message': 'Đăng ký thành công'}), 201
@@ -214,20 +273,23 @@ def api_login():
     password = data.get('password', '').strip()
 
     conn = get_db()
-    user = conn.execute('SELECT * FROM users WHERE username = ? AND password = ?',
-                        (username, hash_password(password))).fetchone()
+    cur = conn.cursor()
+    user = cur.execute(q("SELECT * FROM users WHERE username = %s AND password = %s",
+                         "SELECT * FROM users WHERE username = ? AND password = ?"),
+                       (username, hash_password(password))).fetchone()
     conn.close()
 
     if not user:
         return jsonify({'error': 'Sai username hoặc password'}), 401
 
-    session['user_id'] = user['id']
-    session['username'] = user['username']
-    session['role'] = user['role']
+    u = dict(user)
+    session['user_id'] = u['id']
+    session['username'] = u['username']
+    session['role'] = u['role']
 
     return jsonify({
         'message': 'Đăng nhập thành công',
-        'user': {'id': user['id'], 'username': user['username'], 'role': user['role'], 'score': user['score']}
+        'user': {'id': u['id'], 'username': u['username'], 'role': u['role'], 'score': u['score']}
     })
 
 
@@ -241,14 +303,12 @@ def api_logout():
 @login_required
 def api_me():
     conn = get_db()
-    user = conn.execute('SELECT * FROM users WHERE id = ?', (session['user_id'],)).fetchone()
+    cur = conn.cursor()
+    user = cur.execute(q("SELECT * FROM users WHERE id = %s", "SELECT * FROM users WHERE id = ?"),
+                       (session['user_id'],)).fetchone()
     conn.close()
-    return jsonify({
-        'id': user['id'],
-        'username': user['username'],
-        'role': user['role'],
-        'score': user['score']
-    })
+    u = dict(user)
+    return jsonify({'id': u['id'], 'username': u['username'], 'role': u['role'], 'score': u['score']})
 
 
 # ==================== USERS API ====================
@@ -257,10 +317,14 @@ def api_me():
 @login_required
 def api_users():
     conn = get_db()
+    cur = conn.cursor()
     if session.get('role') in ('admin', 'bithu'):
-        users = conn.execute('SELECT id, username, role, score FROM users WHERE role = ? ORDER BY username', ('user',)).fetchall()
+        users = cur.execute(q("SELECT id, username, role, score FROM users WHERE role = 'user' ORDER BY username",
+                              "SELECT id, username, role, score FROM users WHERE role = 'user' ORDER BY username")).fetchall()
     else:
-        users = conn.execute('SELECT id, username, role, score FROM users WHERE id = ?', (session['user_id'],)).fetchall()
+        users = cur.execute(q("SELECT id, username, role, score FROM users WHERE id = %s",
+                              "SELECT id, username, role, score FROM users WHERE id = ?"),
+                            (session['user_id'],)).fetchall()
     conn.close()
     return jsonify([dict(u) for u in users])
 
@@ -273,9 +337,9 @@ def api_update_role(user_id):
     new_role = data.get('role')
     if new_role not in ('user', 'bithu'):
         return jsonify({'error': 'Role không hợp lệ'}), 400
-
     conn = get_db()
-    conn.execute('UPDATE users SET role = ? WHERE id = ?', (new_role, user_id))
+    cur = conn.cursor()
+    cur.execute(q("UPDATE users SET role = %s WHERE id = %s", "UPDATE users SET role = ? WHERE id = ?"), (new_role, user_id))
     conn.commit()
     conn.close()
     return jsonify({'message': 'Đã cập nhật role'})
@@ -284,11 +348,11 @@ def api_update_role(user_id):
 # ==================== TASKS API ====================
 
 def get_task_assignees(conn, task_id):
-    rows = conn.execute('''
-        SELECT u.id, u.username FROM task_assignments ta
-        JOIN users u ON ta.user_id = u.id
-        WHERE ta.task_id = ?
-    ''', (task_id,)).fetchall()
+    cur = conn.cursor()
+    rows = cur.execute(q(
+        "SELECT u.id, u.username FROM task_assignments ta JOIN users u ON ta.user_id = u.id WHERE ta.task_id = %s",
+        "SELECT u.id, u.username FROM task_assignments ta JOIN users u ON ta.user_id = u.id WHERE ta.task_id = ?"),
+        (task_id,)).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -307,22 +371,28 @@ def serialize_task(conn, task, user_id=None, role=None):
 @login_required
 def api_tasks():
     conn = get_db()
+    cur = conn.cursor()
     role = session.get('role')
     user_id = session['user_id']
 
     if role in ('admin', 'bithu'):
-        tasks = conn.execute('SELECT * FROM tasks ORDER BY created_at DESC').fetchall()
-        result = [serialize_task(conn, t, user_id, role) for t in tasks]
+        tasks = cur.execute("SELECT * FROM tasks ORDER BY created_at DESC").fetchall()
     else:
-        assigned = conn.execute('SELECT task_id FROM task_assignments WHERE user_id = ?', (user_id,)).fetchall()
+        if is_pg():
+            assigned = cur.execute("SELECT task_id FROM task_assignments WHERE user_id = %s", (user_id,)).fetchall()
+        else:
+            assigned = cur.execute("SELECT task_id FROM task_assignments WHERE user_id = ?", (user_id,)).fetchall()
         task_ids = [a['task_id'] for a in assigned]
         if task_ids:
-            placeholders = ','.join('?' * len(task_ids))
-            tasks = conn.execute(f'SELECT * FROM tasks WHERE id IN ({placeholders}) ORDER BY created_at DESC', task_ids).fetchall()
+            if is_pg():
+                tasks = cur.execute(q(f"SELECT * FROM tasks WHERE id IN ({','.join(['%s']*len(task_ids))}) ORDER BY created_at DESC", ""), task_ids).fetchall()
+            else:
+                placeholders = ','.join('?' * len(task_ids))
+                tasks = cur.execute(f"SELECT * FROM tasks WHERE id IN ({placeholders}) ORDER BY created_at DESC", task_ids).fetchall()
         else:
             tasks = []
-        result = [serialize_task(conn, t, user_id, role) for t in tasks]
 
+    result = [serialize_task(conn, t, user_id, role) for t in tasks]
     conn.close()
     return jsonify(result)
 
@@ -336,21 +406,8 @@ def api_create_task():
     if not title:
         return jsonify({'error': 'Tiêu đề không được để trống'}), 400
 
-    max_assignees = data.get('max_assignees', 3)
-    try:
-        max_assignees = int(max_assignees)
-    except (ValueError, TypeError):
-        max_assignees = 3
-    if max_assignees < 1:
-        max_assignees = 1
-    if max_assignees > 10:
-        max_assignees = 10
-
-    points = data.get('points', 0)
-    try:
-        points = int(points)
-    except (ValueError, TypeError):
-        points = 0
+    max_assignees = min(max(int(data.get('max_assignees', 3) or 3), 1), 10)
+    points = int(data.get('points', 0) or 0)
 
     assigned_ids = data.get('assigned_to', [])
     if not isinstance(assigned_ids, list):
@@ -361,28 +418,22 @@ def api_create_task():
         return jsonify({'error': f'Tối đa giao cho {max_assignees} người'}), 400
 
     conn = get_db()
+    cur = conn.cursor()
     due_date = data.get('due_date') or None
 
-    cursor = conn.execute('''
-        INSERT INTO tasks (title, description, status, priority, due_date, max_assignees, points, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (
-        title,
-        data.get('description', '') or '',
-        data.get('status', 'pending'),
-        data.get('priority', 'medium'),
-        due_date,
-        max_assignees,
-        points,
-        session['user_id']
-    ))
-    task_id = cursor.lastrowid
+    cur.execute(q(
+        "INSERT INTO tasks (title, description, status, priority, due_date, max_assignees, points, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+        "INSERT INTO tasks (title, description, status, priority, due_date, max_assignees, points, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"),
+        (title, data.get('description', '') or '', data.get('status', 'pending'), data.get('priority', 'medium'),
+         due_date, max_assignees, points, session['user_id']))
+    task_id = cur.fetchone()['id']
 
     for uid in assigned_ids:
-        conn.execute('INSERT INTO task_assignments (task_id, user_id) VALUES (?, ?)', (task_id, uid))
+        cur.execute(q("INSERT INTO task_assignments (task_id, user_id) VALUES (%s, %s)",
+                      "INSERT INTO task_assignments (task_id, user_id) VALUES (?, ?)"), (task_id, uid))
 
     conn.commit()
-    task = conn.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
+    task = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
     result = serialize_task(conn, task, session['user_id'])
     conn.close()
     return jsonify(result), 201
@@ -394,58 +445,39 @@ def api_create_task():
 def api_update_task(task_id):
     data = request.get_json()
     conn = get_db()
-    task = conn.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
+    cur = conn.cursor()
+    task = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
     if not task:
         conn.close()
         return jsonify({'error': 'Task không tồn tại'}), 404
 
-    max_assignees = data.get('max_assignees', task['max_assignees'])
-    try:
-        max_assignees = int(max_assignees)
-    except (ValueError, TypeError):
-        max_assignees = task['max_assignees'] or 3
-    if max_assignees < 1:
-        max_assignees = 1
-    if max_assignees > 10:
-        max_assignees = 10
-
-    points = data.get('points', task['points'] or 0)
-    try:
-        points = int(points)
-    except (ValueError, TypeError):
-        points = 0
+    t = dict(task)
+    max_assignees = min(max(int(data.get('max_assignees', t['max_assignees']) or 3), 1), 10)
+    points = int(data.get('points', t['points'] or 0) or 0)
+    due_date = data.get('due_date') or None
 
     assigned_ids = data.get('assigned_to', [])
     if not isinstance(assigned_ids, list):
         assigned_ids = [assigned_ids] if assigned_ids else []
     assigned_ids = [int(x) for x in assigned_ids if x]
-
     if len(assigned_ids) > max_assignees:
         conn.close()
         return jsonify({'error': f'Tối đa giao cho {max_assignees} người'}), 400
 
-    due_date = data.get('due_date') or None
+    cur.execute(q(
+        "UPDATE tasks SET title=%s, description=%s, status=%s, priority=%s, due_date=%s, max_assignees=%s, points=%s WHERE id=%s",
+        "UPDATE tasks SET title=?, description=?, status=?, priority=?, due_date=?, max_assignees=?, points=? WHERE id=?"),
+        (data.get('title', t['title']), data.get('description', t['description']) or '',
+         data.get('status', t['status']), data.get('priority', t['priority']),
+         due_date, max_assignees, points, task_id))
 
-    conn.execute('''
-        UPDATE tasks SET title=?, description=?, status=?, priority=?, due_date=?, max_assignees=?, points=?
-        WHERE id=?
-    ''', (
-        data.get('title', task['title']),
-        data.get('description', task['description']) or '',
-        data.get('status', task['status']),
-        data.get('priority', task['priority']),
-        due_date,
-        max_assignees,
-        points,
-        task_id
-    ))
-
-    conn.execute('DELETE FROM task_assignments WHERE task_id = ?', (task_id,))
+    cur.execute(q("DELETE FROM task_assignments WHERE task_id = %s", "DELETE FROM task_assignments WHERE task_id = ?"), (task_id,))
     for uid in assigned_ids:
-        conn.execute('INSERT INTO task_assignments (task_id, user_id) VALUES (?, ?)', (task_id, uid))
+        cur.execute(q("INSERT INTO task_assignments (task_id, user_id) VALUES (%s, %s)",
+                      "INSERT INTO task_assignments (task_id, user_id) VALUES (?, ?)"), (task_id, uid))
 
     conn.commit()
-    updated = conn.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
+    updated = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
     result = serialize_task(conn, updated, session['user_id'])
     conn.close()
     return jsonify(result)
@@ -456,13 +488,13 @@ def api_update_task(task_id):
 @admin_required
 def api_delete_task(task_id):
     conn = get_db()
-    task = conn.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
+    cur = conn.cursor()
+    task = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
     if not task:
         conn.close()
         return jsonify({'error': 'Task không tồn tại'}), 404
-
-    conn.execute('DELETE FROM task_assignments WHERE task_id = ?', (task_id,))
-    conn.execute('DELETE FROM tasks WHERE id = ?', (task_id,))
+    cur.execute(q("DELETE FROM task_assignments WHERE task_id = %s", "DELETE FROM task_assignments WHERE task_id = ?"), (task_id,))
+    cur.execute(q("DELETE FROM tasks WHERE id = %s", "DELETE FROM tasks WHERE id = ?"), (task_id,))
     conn.commit()
     conn.close()
     return jsonify({'message': 'Đã xóa task'})
@@ -474,36 +506,35 @@ def api_delete_task(task_id):
 @login_required
 def api_claim_task(task_id):
     conn = get_db()
-    task = conn.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
+    cur = conn.cursor()
+    task = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
     if not task:
         conn.close()
         return jsonify({'error': 'Task không tồn tại'}), 404
-
     if task['status'] == 'done':
         conn.close()
         return jsonify({'error': 'Task đã hoàn thành'}), 400
 
-    already = conn.execute(
-        'SELECT 1 FROM task_assignments WHERE task_id = ? AND user_id = ?',
-        (task_id, session['user_id'])
-    ).fetchone()
+    already = cur.execute(q("SELECT 1 FROM task_assignments WHERE task_id = %s AND user_id = %s",
+                            "SELECT 1 FROM task_assignments WHERE task_id = ? AND user_id = ?"),
+                          (task_id, session['user_id'])).fetchone()
     if already:
         conn.close()
         return jsonify({'error': 'Bạn đã nhận task này rồi'}), 400
 
-    count = conn.execute(
-        'SELECT COUNT(*) as c FROM task_assignments WHERE task_id = ?', (task_id,)
-    ).fetchone()['c']
+    count = cur.execute(q("SELECT COUNT(*) as c FROM task_assignments WHERE task_id = %s",
+                          "SELECT COUNT(*) as c FROM task_assignments WHERE task_id = ?"),
+                        (task_id,)).fetchone()['c']
 
-    max_assignees = task['max_assignees'] or 3
-    if count >= max_assignees:
+    max_a = task['max_assignees'] or 3
+    if count >= max_a:
         conn.close()
         return jsonify({'error': 'Task đã đủ người nhận'}), 400
 
-    conn.execute('INSERT INTO task_assignments (task_id, user_id) VALUES (?, ?)',
-                 (task_id, session['user_id']))
+    cur.execute(q("INSERT INTO task_assignments (task_id, user_id) VALUES (%s, %s)",
+                  "INSERT INTO task_assignments (task_id, user_id) VALUES (?, ?)"), (task_id, session['user_id']))
     conn.commit()
-    updated = conn.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
+    updated = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
     result = serialize_task(conn, updated, session['user_id'])
     conn.close()
     return jsonify(result)
@@ -513,28 +544,28 @@ def api_claim_task(task_id):
 @login_required
 def api_unclaim_task(task_id):
     conn = get_db()
-    task = conn.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
+    cur = conn.cursor()
+    task = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
     if not task:
         conn.close()
         return jsonify({'error': 'Task không tồn tại'}), 404
 
     if session['role'] not in ('admin', 'bithu'):
-        own = conn.execute(
-            'SELECT 1 FROM task_assignments WHERE task_id = ? AND user_id = ?',
-            (task_id, session['user_id'])
-        ).fetchone()
+        own = cur.execute(q("SELECT 1 FROM task_assignments WHERE task_id = %s AND user_id = %s",
+                            "SELECT 1 FROM task_assignments WHERE task_id = ? AND user_id = ?"),
+                          (task_id, session['user_id'])).fetchone()
         if not own:
             conn.close()
             return jsonify({'error': 'Bạn chưa nhận task này'}), 400
 
-    target_user = request.get_json().get('user_id', session['user_id']) if request.is_json else session['user_id']
-    if session['role'] not in ('admin', 'bithu'):
-        target_user = session['user_id']
+    target_user = session['user_id']
+    if session['role'] in ('admin', 'bithu') and request.is_json:
+        target_user = request.get_json().get('user_id', session['user_id'])
 
-    conn.execute('DELETE FROM task_assignments WHERE task_id = ? AND user_id = ?',
-                 (task_id, target_user))
+    cur.execute(q("DELETE FROM task_assignments WHERE task_id = %s AND user_id = %s",
+                  "DELETE FROM task_assignments WHERE task_id = ? AND user_id = ?"), (task_id, target_user))
     conn.commit()
-    updated = conn.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
+    updated = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
     result = serialize_task(conn, updated, session['user_id'])
     conn.close()
     return jsonify(result)
@@ -551,33 +582,36 @@ def api_update_status(task_id):
         return jsonify({'error': 'Trạng thái không hợp lệ'}), 400
 
     conn = get_db()
-    task = conn.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
+    cur = conn.cursor()
+    task = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
     if not task:
         conn.close()
         return jsonify({'error': 'Task không tồn tại'}), 404
 
     if session['role'] not in ('admin', 'bithu'):
-        assigned = conn.execute(
-            'SELECT 1 FROM task_assignments WHERE task_id = ? AND user_id = ?',
-            (task_id, session['user_id'])
-        ).fetchone()
+        assigned = cur.execute(q("SELECT 1 FROM task_assignments WHERE task_id = %s AND user_id = %s",
+                                "SELECT 1 FROM task_assignments WHERE task_id = ? AND user_id = ?"),
+                              (task_id, session['user_id'])).fetchone()
         if not assigned:
             conn.close()
             return jsonify({'error': 'Không có quyền cập nhật task này'}), 403
 
     old_status = task['status']
-    conn.execute('UPDATE tasks SET status = ? WHERE id = ?', (new_status, task_id))
+    cur.execute(q("UPDATE tasks SET status = %s WHERE id = %s", "UPDATE tasks SET status = ? WHERE id = ?"), (new_status, task_id))
 
     if new_status == 'done' and old_status != 'done' and task['points'] and task['points'] > 0:
-        assignees = conn.execute('SELECT user_id FROM task_assignments WHERE task_id = ?', (task_id,)).fetchall()
+        assignees = cur.execute(q("SELECT user_id FROM task_assignments WHERE task_id = %s",
+                                  "SELECT user_id FROM task_assignments WHERE task_id = ?"), (task_id,)).fetchall()
         for a in assignees:
             uid = a['user_id']
-            conn.execute('UPDATE users SET score = score + ? WHERE id = ?', (task['points'], uid))
-            conn.execute('INSERT INTO points_log (user_id, points, reason, task_id, created_by) VALUES (?, ?, ?, ?, ?)',
-                         (uid, task['points'], f'Hoàn thành task: {task["title"]}', task_id, session['user_id']))
+            cur.execute(q("UPDATE users SET score = score + %s WHERE id = %s",
+                          "UPDATE users SET score = score + ? WHERE id = ?"), (task['points'], uid))
+            cur.execute(q("INSERT INTO points_log (user_id, points, reason, task_id, created_by) VALUES (%s, %s, %s, %s, %s)",
+                          "INSERT INTO points_log (user_id, points, reason, task_id, created_by) VALUES (?, ?, ?, ?, ?)"),
+                        (uid, task['points'], f"Hoàn thành task: {task['title']}", task_id, session['user_id']))
 
     conn.commit()
-    updated = conn.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
+    updated = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
     result = serialize_task(conn, updated, session['user_id'])
     conn.close()
     return jsonify(result)
@@ -590,7 +624,9 @@ def api_update_status(task_id):
 @admin_required
 def api_points_list():
     conn = get_db()
-    users = conn.execute('SELECT id, username, score, role FROM users WHERE role = ? ORDER BY score DESC', ('user',)).fetchall()
+    cur = conn.cursor()
+    users = cur.execute(q("SELECT id, username, score, role FROM users WHERE role = 'user' ORDER BY score DESC",
+                          "SELECT id, username, score, role FROM users WHERE role = 'user' ORDER BY score DESC")).fetchall()
     conn.close()
     return jsonify([dict(u) for u in users])
 
@@ -600,25 +636,19 @@ def api_points_list():
 def api_points_detail(user_id):
     if session['role'] not in ('admin', 'bithu') and session['user_id'] != user_id:
         return jsonify({'error': 'Không có quyền'}), 403
-
     conn = get_db()
-    user = conn.execute('SELECT id, username, score FROM users WHERE id = ?', (user_id,)).fetchone()
+    cur = conn.cursor()
+    user = cur.execute(q("SELECT id, username, score FROM users WHERE id = %s",
+                        "SELECT id, username, score FROM users WHERE id = ?"), (user_id,)).fetchone()
     if not user:
         conn.close()
         return jsonify({'error': 'User không tồn tại'}), 404
-
-    logs = conn.execute('''
-        SELECT pl.*, u.username as given_by_name
-        FROM points_log pl
-        LEFT JOIN users u ON pl.created_by = u.id
-        WHERE pl.user_id = ?
-        ORDER BY pl.created_at DESC
-    ''', (user_id,)).fetchall()
+    logs = cur.execute(q(
+        "SELECT pl.*, u.username as given_by_name FROM points_log pl LEFT JOIN users u ON pl.created_by = u.id WHERE pl.user_id = %s ORDER BY pl.created_at DESC",
+        "SELECT pl.*, u.username as given_by_name FROM points_log pl LEFT JOIN users u ON pl.created_by = u.id WHERE pl.user_id = ? ORDER BY pl.created_at DESC"),
+        (user_id,)).fetchall()
     conn.close()
-    return jsonify({
-        'user': dict(user),
-        'logs': [dict(l) for l in logs]
-    })
+    return jsonify({'user': dict(user), 'logs': [dict(l) for l in logs]})
 
 
 @app.route('/api/points', methods=['POST'])
@@ -629,24 +659,22 @@ def api_add_points():
     user_id = data.get('user_id')
     points = data.get('points', 0)
     reason = data.get('reason', '').strip()
-
     try:
         points = int(points)
     except (ValueError, TypeError):
         return jsonify({'error': 'Điểm không hợp lệ'}), 400
-
     if not user_id or not reason:
         return jsonify({'error': 'Thiếu thông tin'}), 400
-
     conn = get_db()
-    user = conn.execute('SELECT id FROM users WHERE id = ?', (user_id,)).fetchone()
+    cur = conn.cursor()
+    user = cur.execute(q("SELECT id FROM users WHERE id = %s", "SELECT id FROM users WHERE id = ?"), (user_id,)).fetchone()
     if not user:
         conn.close()
         return jsonify({'error': 'User không tồn tại'}), 404
-
-    conn.execute('UPDATE users SET score = score + ? WHERE id = ?', (points, user_id))
-    conn.execute('INSERT INTO points_log (user_id, points, reason, created_by) VALUES (?, ?, ?, ?)',
-                 (user_id, points, reason, session['user_id']))
+    cur.execute(q("UPDATE users SET score = score + %s WHERE id = %s", "UPDATE users SET score = score + ? WHERE id = ?"), (points, user_id))
+    cur.execute(q("INSERT INTO points_log (user_id, points, reason, created_by) VALUES (%s, %s, %s, %s)",
+                  "INSERT INTO points_log (user_id, points, reason, created_by) VALUES (?, ?, ?, ?)"),
+                (user_id, points, reason, session['user_id']))
     conn.commit()
     conn.close()
     return jsonify({'message': 'Đã cập nhật điểm'})
@@ -655,11 +683,13 @@ def api_add_points():
 # ==================== FUND API ====================
 
 def get_fund(conn):
-    fund = conn.execute('SELECT * FROM fund LIMIT 1').fetchone()
+    cur = conn.cursor()
+    fund = cur.execute("SELECT * FROM fund LIMIT 1").fetchone()
     if not fund:
-        conn.execute("INSERT INTO fund (name, balance) VALUES ('Quỹ chung', 0)")
+        cur.execute(q("INSERT INTO fund (name, balance) VALUES ('Quỹ chung', 0) RETURNING *",
+                      "INSERT INTO fund (name, balance) VALUES ('Quỹ chung', 0)"))
         conn.commit()
-        fund = conn.execute('SELECT * FROM fund LIMIT 1').fetchone()
+        fund = cur.execute("SELECT * FROM fund LIMIT 1").fetchone()
     return dict(fund)
 
 
@@ -683,15 +713,15 @@ def api_fund_update():
         amount = float(amount)
     except (ValueError, TypeError):
         return jsonify({'error': 'Số tiền không hợp lệ'}), 400
-
     conn = get_db()
+    cur = conn.cursor()
     fund = get_fund(conn)
     new_balance = fund['balance'] + amount
     if new_balance < 0:
         conn.close()
         return jsonify({'error': 'Số dư quỹ không đủ'}), 400
-
-    conn.execute('UPDATE fund SET balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', (new_balance, fund['id']))
+    cur.execute(q("UPDATE fund SET balance = %s, updated_at = NOW() WHERE id = %s",
+                  "UPDATE fund SET balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"), (new_balance, fund['id']))
     conn.commit()
     conn.close()
     return jsonify({'message': 'Đã cập nhật quỹ', 'balance': new_balance})
@@ -707,16 +737,16 @@ def api_fund_set():
         amount = float(amount)
     except (ValueError, TypeError):
         return jsonify({'error': 'Số tiền không hợp lệ'}), 400
-
     if amount < 0:
         return jsonify({'error': 'Số tiền phải >= 0'}), 400
-
     conn = get_db()
+    cur = conn.cursor()
     fund = get_fund(conn)
-    conn.execute('UPDATE fund SET balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', (amount, fund['id']))
+    cur.execute(q("UPDATE fund SET balance = %s, updated_at = NOW() WHERE id = %s",
+                  "UPDATE fund SET balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"), (amount, fund['id']))
     conn.commit()
     conn.close()
-    return jsonify({'message': 'Đã设置 quỹ', 'balance': amount})
+    return jsonify({'message': 'Đã cập nhật quỹ', 'balance': amount})
 
 
 # ==================== FINANCE API ====================
@@ -726,12 +756,10 @@ def api_fund_set():
 @admin_required
 def api_finance_list():
     conn = get_db()
-    transactions = conn.execute('''
-        SELECT f.*, u.username as created_by_name
-        FROM finance f
-        LEFT JOIN users u ON f.created_by = u.id
-        ORDER BY f.date DESC
-    ''').fetchall()
+    cur = conn.cursor()
+    transactions = cur.execute(q(
+        "SELECT f.*, u.username as created_by_name FROM finance f LEFT JOIN users u ON f.created_by = u.id ORDER BY f.date DESC",
+        "SELECT f.*, u.username as created_by_name FROM finance f LEFT JOIN users u ON f.created_by = u.id ORDER BY f.date DESC")).fetchall()
     conn.close()
     return jsonify([dict(t) for t in transactions])
 
@@ -741,16 +769,14 @@ def api_finance_list():
 @admin_required
 def api_finance_summary():
     conn = get_db()
-    income = conn.execute("SELECT COALESCE(SUM(amount), 0) as total FROM finance WHERE type = 'income'").fetchone()['total']
-    expense = conn.execute("SELECT COALESCE(SUM(amount), 0) as total FROM finance WHERE type = 'expense'").fetchone()['total']
+    cur = conn.cursor()
+    income = cur.execute(q("SELECT COALESCE(SUM(amount), 0) as total FROM finance WHERE type = 'income'",
+                           "SELECT COALESCE(SUM(amount), 0) as total FROM finance WHERE type = 'income'")).fetchone()['total']
+    expense = cur.execute(q("SELECT COALESCE(SUM(amount), 0) as total FROM finance WHERE type = 'expense'",
+                            "SELECT COALESCE(SUM(amount), 0) as total FROM finance WHERE type = 'expense'")).fetchone()['total']
     fund = get_fund(conn)
     conn.close()
-    return jsonify({
-        'income': income,
-        'expense': expense,
-        'balance': income - expense,
-        'fund': fund['balance']
-    })
+    return jsonify({'income': income, 'expense': expense, 'balance': income - expense, 'fund': fund['balance']})
 
 
 @app.route('/api/finance', methods=['POST'])
@@ -765,27 +791,28 @@ def api_finance_create():
 
     if trans_type not in ('income', 'expense'):
         return jsonify({'error': 'Loại giao dịch không hợp lệ'}), 400
-
     try:
         amount = float(amount)
     except (ValueError, TypeError):
         return jsonify({'error': 'Số tiền không hợp lệ'}), 400
-
     if amount <= 0:
         return jsonify({'error': 'Số tiền phải lớn hơn 0'}), 400
 
     conn = get_db()
+    cur = conn.cursor()
 
     if trans_type == 'expense':
         fund = get_fund(conn)
         if fund['balance'] < amount:
             conn.close()
             return jsonify({'error': f'Quỹ không đủ. Số dư quỹ: {int(fund["balance"]):,} VND'}), 400
-        conn.execute('UPDATE fund SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-                     (amount, fund['id']))
+        cur.execute(q("UPDATE fund SET balance = balance - %s, updated_at = NOW() WHERE id = %s",
+                      "UPDATE fund SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"),
+                    (amount, fund['id']))
 
-    conn.execute('INSERT INTO finance (type, amount, description, category, created_by) VALUES (?, ?, ?, ?, ?)',
-                 (trans_type, amount, description, category, session['user_id']))
+    cur.execute(q("INSERT INTO finance (type, amount, description, category, created_by) VALUES (%s, %s, %s, %s, %s)",
+                  "INSERT INTO finance (type, amount, description, category, created_by) VALUES (?, ?, ?, ?, ?)"),
+                (trans_type, amount, description, category, session['user_id']))
     conn.commit()
     fund = get_fund(conn)
     conn.close()
@@ -797,12 +824,14 @@ def api_finance_create():
 @admin_required
 def api_finance_delete(finance_id):
     conn = get_db()
-    trans = conn.execute('SELECT * FROM finance WHERE id = ?', (finance_id,)).fetchone()
-    if trans and trans['type'] == 'expense':
+    cur = conn.cursor()
+    trans = cur.execute(q("SELECT * FROM finance WHERE id = %s", "SELECT * FROM finance WHERE id = ?"), (finance_id,)).fetchone()
+    if trans and dict(trans)['type'] == 'expense':
         fund = get_fund(conn)
-        conn.execute('UPDATE fund SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-                     (trans['amount'], fund['id']))
-    conn.execute('DELETE FROM finance WHERE id = ?', (finance_id,))
+        cur.execute(q("UPDATE fund SET balance = balance + %s, updated_at = NOW() WHERE id = %s",
+                      "UPDATE fund SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"),
+                    (dict(trans)['amount'], fund['id']))
+    cur.execute(q("DELETE FROM finance WHERE id = %s", "DELETE FROM finance WHERE id = ?"), (finance_id,))
     conn.commit()
     conn.close()
     return jsonify({'message': 'Đã xóa giao dịch'})
@@ -810,6 +839,5 @@ def api_finance_delete(finance_id):
 
 if __name__ == '__main__':
     init_db()
-    migrate_db()
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=os.environ.get('FLASK_DEBUG', '0') == '1', host='0.0.0.0', port=port)
