@@ -1,4 +1,3 @@
-// Auth handling for login and register pages
 document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('loginForm');
     const registerForm = document.getElementById('registerForm');
@@ -11,7 +10,6 @@ document.addEventListener('DOMContentLoaded', () => {
         registerForm.addEventListener('submit', handleRegister);
     }
 
-    // Check if already logged in
     fetch('/api/me').then(r => {
         if (r.ok) window.location.href = '/dashboard';
     }).catch(() => {});
@@ -26,7 +24,7 @@ async function handleLogin(e) {
     const password = document.getElementById('password').value.trim();
 
     if (!username || !password) {
-        errorEl.textContent = 'Vui lòng nhập đầy đủ thông tin';
+        errorEl.textContent = 'Vui long nhap day du thong tin';
         return;
     }
 
@@ -39,13 +37,13 @@ async function handleLogin(e) {
         const data = await res.json();
 
         if (!res.ok) {
-            errorEl.textContent = data.error || 'Đăng nhập thất bại';
+            errorEl.textContent = data.error || 'Dang nhap that bai';
             return;
         }
 
         window.location.href = '/dashboard';
     } catch (err) {
-        errorEl.textContent = 'Lỗi kết nối server';
+        errorEl.textContent = 'Loi ket noi server';
     }
 }
 
@@ -59,17 +57,17 @@ async function handleRegister(e) {
     const confirmPassword = document.getElementById('confirmPassword').value.trim();
 
     if (!username || !password) {
-        errorEl.textContent = 'Vui lòng nhập đầy đủ thông tin';
+        errorEl.textContent = 'Vui long nhap day du thong tin';
         return;
     }
 
     if (password !== confirmPassword) {
-        errorEl.textContent = 'Password xác nhận không khớp';
+        errorEl.textContent = 'Password xac nhan khong khop';
         return;
     }
 
     if (password.length < 4) {
-        errorEl.textContent = 'Password phải có ít nhất 4 ký tự';
+        errorEl.textContent = 'Password phai co it nhat 4 ky tu';
         return;
     }
 
@@ -82,12 +80,12 @@ async function handleRegister(e) {
         const data = await res.json();
 
         if (!res.ok) {
-            errorEl.textContent = data.error || 'Đăng ký thất bại';
+            errorEl.textContent = data.error || 'Dang ky that bai';
             return;
         }
 
         window.location.href = '/login';
     } catch (err) {
-        errorEl.textContent = 'Lỗi kết nối server';
+        errorEl.textContent = 'Loi ket noi server';
     }
 }

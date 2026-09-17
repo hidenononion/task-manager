@@ -17,6 +17,10 @@
             </a>
         </nav>
         <div class="sidebar-footer">
+            <button class="theme-toggle" onclick="toggleTheme()">
+                <span class="icon" id="themeIcon">&#9790;</span>
+                <span id="themeLabel">Chế độ sáng</span>
+            </button>
             <div class="user-info">
                 <div class="user-avatar" id="userAvatar">A</div>
                 <div class="user-details">
@@ -33,6 +37,30 @@
 
     <!-- Main Content -->
     <main class="main-content">
+        <!-- Stats Cards -->
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card total">
+                <div class="stat-icon">&#128203;</div>
+                <div class="stat-value" id="statTotal">0</div>
+                <div class="stat-label">Tổng nhiệm vụ</div>
+            </div>
+            <div class="stat-card pending">
+                <div class="stat-icon">&#9203;</div>
+                <div class="stat-value" id="statPending">0</div>
+                <div class="stat-label">Chờ xử lý</div>
+            </div>
+            <div class="stat-card in-progress">
+                <div class="stat-icon">&#9654;</div>
+                <div class="stat-value" id="statInProgress">0</div>
+                <div class="stat-label">Đang thực hiện</div>
+            </div>
+            <div class="stat-card done">
+                <div class="stat-icon">&#10003;</div>
+                <div class="stat-value" id="statDone">0</div>
+                <div class="stat-label">Hoàn thành</div>
+            </div>
+        </div>
+
         <!-- Header -->
         <header class="content-header">
             <div class="header-left">
@@ -41,12 +69,22 @@
                 <span class="task-count" id="taskCount">0 nhiệm vụ</span>
             </div>
             <div class="header-right">
+                <div class="search-bar">
+                    <span class="search-icon">&#128269;</span>
+                    <input type="text" id="searchInput" placeholder="Tìm nhiệm vụ..." oninput="renderTasks()">
+                </div>
                 <div class="filters">
-                    <select id="filterPriority" class="filter-select">
+                    <select id="filterPriority" class="filter-select" onchange="renderTasks()">
                         <option value="">Tất cả ưu tiên</option>
                         <option value="low">Thấp</option>
                         <option value="medium">Trung bình</option>
                         <option value="high">Cao</option>
+                    </select>
+                    <select id="filterStatus" class="filter-select" onchange="renderTasks()">
+                        <option value="">Tất cả trạng thái</option>
+                        <option value="pending">Chờ xử lý</option>
+                        <option value="in_progress">Đang thực hiện</option>
+                        <option value="done">Hoàn thành</option>
                     </select>
                 </div>
                 <button class="btn btn-primary" id="addTaskBtn" onclick="openTaskModal()">+ Thêm nhiệm vụ</button>

@@ -1,4 +1,3 @@
-// Global state
 let currentUser = null;
 let allTasks = [];
 let allUsers = [];
@@ -7,9 +6,9 @@ let deleteTaskId = null;
 
 // ==================== INIT ====================
 document.addEventListener('DOMContentLoaded', async () => {
+    loadTheme();
     await loadUser();
     setupNav();
-    setupFilters();
     await loadTasks();
     await loadUsers();
 });
@@ -43,6 +42,33 @@ function toggleSidebar() {
     document.querySelector('.sidebar-overlay').classList.toggle('active');
 }
 
+// ==================== THEME ====================
+function loadTheme() {
+    const theme = localStorage.getItem('theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+    updateThemeUI(theme);
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    updateThemeUI(next);
+}
+
+function updateThemeUI(theme) {
+    const icon = document.getElementById('themeIcon');
+    const label = document.getElementById('themeLabel');
+    if (theme === 'dark') {
+        icon.innerHTML = '&#9790;';
+        label.textContent = 'Chế độ sáng';
+    } else {
+        icon.innerHTML = '&#9728;';
+        label.textContent = 'Chế độ tối';
+    }
+}
+
 // ==================== NAV ====================
 function setupNav() {
     document.querySelectorAll('.nav-item').forEach(item => {
@@ -59,15 +85,21 @@ function setupNav() {
     });
 }
 
-// ==================== FILTERS ====================
-function setupFilters() {
-    document.getElementById('filterPriority').addEventListener('change', renderTasks);
-}
-
+// ==================== FILTERS & SEARCH ====================
 function getFilteredTasks() {
     const priority = document.getElementById('filterPriority').value;
+    const status = document.getElementById('filterStatus').value;
+    const search = document.getElementById('searchInput').value.toLowerCase().trim();
+
     return allTasks.filter(t => {
         if (priority && t.priority !== priority) return false;
+        if (status && t.status !== status) return false;
+        if (search) {
+            const matchTitle = t.title.toLowerCase().includes(search);
+            const matchDesc = (t.description || '').toLowerCase().includes(search);
+            const matchUser = t.assigned_users.some(u => u.username.toLowerCase().includes(search));
+            if (!matchTitle && !matchDesc && !matchUser) return false;
+        }
         return true;
     });
 }
@@ -112,10 +144,42 @@ function setSelectedAssignees(userIds) {
     });
 }
 
+// ==================== STATS ====================
+function updateStats() {
+    const total = allTasks.length;
+    const pending = allTasks.filter(t => t.status === 'pending').length;
+    const inProgress = allTasks.filter(t => t.status === 'in_progress').length;
+    const done = allTasks.filter(t => t.status === 'done').length;
+
+    animateCounter('statTotal', total);
+    animateCounter('statPending', pending);
+    animateCounter('statInProgress', inProgress);
+    animateCounter('statDone', done);
+}
+
+function animateCounter(id, target) {
+    const el = document.getElementById(id);
+    const current = parseInt(el.textContent) || 0;
+    if (current === target) return;
+
+    const step = target > current ? 1 : -1;
+    const diff = Math.abs(target - current);
+    const duration = Math.min(300, diff * 50);
+    const interval = duration / diff;
+
+    let count = current;
+    const timer = setInterval(() => {
+        count += step;
+        el.textContent = count;
+        if (count === target) clearInterval(timer);
+    }, interval);
+}
+
 // ==================== RENDER ====================
 function renderTasks() {
     const tasks = getFilteredTasks();
     document.getElementById('taskCount').textContent = `${tasks.length} nhiệm vụ`;
+    updateStats();
 
     if (currentView === 'kanban') {
         renderKanban(tasks);
@@ -156,8 +220,8 @@ function createTaskCard(task) {
     let adminActions = '';
     if (isAdmin) {
         adminActions = `
-            <button class="btn-icon" onclick="openEditModal(${task.id})" title="Sửa">&#9998;</button>
-            <button class="btn-icon" onclick="openDeleteModal(${task.id}, '${escapeHtml(task.title)}')" title="Xóa">&#10005;</button>
+            <button class="btn-icon" onclick="openEditModal(${task.id})" title="Sua">&#9998;</button>
+            <button class="btn-icon" onclick="openDeleteModal(${task.id}, '${escapeHtml(task.title)}')" title="Xoa">&#10005;</button>
         `;
     }
 
@@ -169,18 +233,18 @@ function createTaskCard(task) {
 
     let claimBtn = '';
     if (canClaim) {
-        claimBtn = `<button class="btn btn-claim" onclick="claimTask(${task.id})">Nhận task</button>`;
+        claimBtn = `<button class="btn btn-claim" onclick="claimTask(${task.id})">Nhan task</button>`;
     } else if (isClaimed && !isAdmin) {
-        claimBtn = `<button class="btn btn-unclaim" onclick="unclaimTask(${task.id})">Bỏ nhận</button>`;
+        claimBtn = `<button class="btn btn-unclaim" onclick="unclaimTask(${task.id})">Bo nhan</button>`;
     }
 
     let statusSelect = '';
     if (isClaimed || isAdmin) {
         statusSelect = `
             <select class="status-select" onchange="changeStatus(${task.id}, this.value)">
-                <option value="pending" ${task.status === 'pending' ? 'selected' : ''}>Chờ xử lý</option>
-                <option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>Đang thực hiện</option>
-                <option value="done" ${task.status === 'done' ? 'selected' : ''}>Hoàn thành</option>
+                <option value="pending" ${task.status === 'pending' ? 'selected' : ''}>Cho xu ly</option>
+                <option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>Dang thuc hien</option>
+                <option value="done" ${task.status === 'done' ? 'selected' : ''}>Hoan thanh</option>
             </select>
         `;
     }
@@ -195,7 +259,7 @@ function createTaskCard(task) {
             <div class="task-card-footer">
                 <div class="task-card-meta">
                     <span class="priority-tag ${task.priority}">${getPriorityLabel(task.priority)}</span>
-                    ${assigneeTags || '<span class="assignee-tag" style="color:var(--text-muted)">Chưa ai nhận</span>'}
+                    ${assigneeTags || '<span class="assignee-tag" style="color:var(--text-muted)">Chua ai nhan</span>'}
                     ${slotInfo}
                     ${task.due_date ? `<span class="due-date ${isOverdue ? 'overdue' : ''}">${formatDate(task.due_date)}</span>` : ''}
                 </div>
@@ -212,7 +276,7 @@ function renderList(tasks) {
     const tbody = document.getElementById('taskTableBody');
 
     if (!tasks.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><p>Không có task nào</p></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><p>Khong co task nao</p></td></tr>';
         return;
     }
 
@@ -220,14 +284,13 @@ function renderList(tasks) {
         const isAdmin = currentUser.role === 'admin';
         const isClaimed = task.is_claimed_by_me;
         const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
-        const slotsLeft = task.slots_left;
-        const canClaim = !isAdmin && !isClaimed && slotsLeft > 0 && task.status !== 'done';
+        const canClaim = !isAdmin && !isClaimed && task.slots_left > 0 && task.status !== 'done';
 
         let adminActions = '';
         if (isAdmin) {
             adminActions = `
-                <button class="btn-icon" onclick="openEditModal(${task.id})" title="Sửa">&#9998;</button>
-                <button class="btn-icon" onclick="openDeleteModal(${task.id}, '${escapeHtml(task.title)}')" title="Xóa">&#10005;</button>
+                <button class="btn-icon" onclick="openEditModal(${task.id})" title="Sua">&#9998;</button>
+                <button class="btn-icon" onclick="openDeleteModal(${task.id}, '${escapeHtml(task.title)}')" title="Xoa">&#10005;</button>
             `;
         }
 
@@ -237,9 +300,9 @@ function renderList(tasks) {
         if (isClaimed || isAdmin) {
             statusCell = `
                 <select class="status-select" onchange="changeStatus(${task.id}, this.value)">
-                    <option value="pending" ${task.status === 'pending' ? 'selected' : ''}>Chờ xử lý</option>
-                    <option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>Đang thực hiện</option>
-                    <option value="done" ${task.status === 'done' ? 'selected' : ''}>Hoàn thành</option>
+                    <option value="pending" ${task.status === 'pending' ? 'selected' : ''}>Cho xu ly</option>
+                    <option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>Dang thuc hien</option>
+                    <option value="done" ${task.status === 'done' ? 'selected' : ''}>Hoan thanh</option>
                 </select>
             `;
         } else {
@@ -248,9 +311,9 @@ function renderList(tasks) {
 
         let claimBtn = '';
         if (canClaim) {
-            claimBtn = `<button class="btn btn-claim btn-sm" onclick="claimTask(${task.id})">Nhận</button>`;
+            claimBtn = `<button class="btn btn-claim btn-sm" onclick="claimTask(${task.id})">Nhan</button>`;
         } else if (isClaimed && !isAdmin) {
-            claimBtn = `<button class="btn btn-unclaim btn-sm" onclick="unclaimTask(${task.id})">Bỏ nhận</button>`;
+            claimBtn = `<button class="btn btn-unclaim btn-sm" onclick="unclaimTask(${task.id})">Bo nhan</button>`;
         }
 
         return `
@@ -263,7 +326,7 @@ function renderList(tasks) {
                 </td>
                 <td>${statusCell}</td>
                 <td><span class="priority-tag ${task.priority}">${getPriorityLabel(task.priority)}</span></td>
-                <td>${assigneeNames || '<span style="color:var(--text-muted)">Chưa ai nhận</span>'}</td>
+                <td>${assigneeNames || '<span style="color:var(--text-muted)">Chua ai nhan</span>'}</td>
                 <td><span class="slot-info">${task.assignee_count}/${task.max_assignees}</span></td>
                 <td>${task.due_date ? `<span class="due-date ${isOverdue ? 'overdue' : ''}">${formatDate(task.due_date)}</span>` : '-'}</td>
                 <td>${adminActions}${claimBtn}</td>
@@ -278,13 +341,13 @@ async function claimTask(taskId) {
         const res = await fetch(`/api/tasks/${taskId}/claim`, { method: 'POST' });
         const data = await res.json();
         if (!res.ok) {
-            showToast(data.error || 'Lỗi nhận task', 'error');
+            showToast(data.error || 'Loi nhan task', 'error');
             return;
         }
         await loadTasks();
-        showToast('Đã nhận task thành công', 'success');
+        showToast('Da nhan task thanh cong', 'success');
     } catch (err) {
-        showToast('Lỗi kết nối', 'error');
+        showToast('Loi ket noi', 'error');
     }
 }
 
@@ -297,13 +360,13 @@ async function unclaimTask(taskId) {
         });
         const data = await res.json();
         if (!res.ok) {
-            showToast(data.error || 'Lỗi bỏ nhận task', 'error');
+            showToast(data.error || 'Loi bo nhan task', 'error');
             return;
         }
         await loadTasks();
-        showToast('Đã bỏ nhận task', 'success');
+        showToast('Da bo nhan task', 'success');
     } catch (err) {
-        showToast('Lỗi kết nối', 'error');
+        showToast('Loi ket noi', 'error');
     }
 }
 
@@ -317,13 +380,13 @@ async function changeStatus(taskId, newStatus) {
         });
         if (!res.ok) {
             const data = await res.json();
-            showToast(data.error || 'Lỗi cập nhật', 'error');
+            showToast(data.error || 'Loi cap nhat', 'error');
             return;
         }
         await loadTasks();
-        showToast('Đã cập nhật trạng thái', 'success');
+        showToast('Da cap nhat trang thai', 'success');
     } catch (err) {
-        showToast('Lỗi kết nối', 'error');
+        showToast('Loi ket noi', 'error');
     }
 }
 
@@ -333,7 +396,7 @@ function openTaskModal(taskId = null) {
     if (taskId) {
         const task = allTasks.find(t => t.id === taskId);
         if (!task) return;
-        document.getElementById('modalTitle').textContent = 'Sửa nhiệm vụ';
+        document.getElementById('modalTitle').textContent = 'Sua nhiem vu';
         document.getElementById('taskId').value = task.id;
         document.getElementById('taskTitle').value = task.title;
         document.getElementById('taskDesc').value = task.description || '';
@@ -343,7 +406,7 @@ function openTaskModal(taskId = null) {
         document.getElementById('taskDueDate').value = task.due_date || '';
         setSelectedAssignees(task.assigned_users.map(u => u.id));
     } else {
-        document.getElementById('modalTitle').textContent = 'Thêm nhiệm vụ mới';
+        document.getElementById('modalTitle').textContent = 'Them nhiem vu moi';
         document.getElementById('taskForm').reset();
         document.getElementById('taskId').value = '';
         document.getElementById('taskPriority').value = 'medium';
@@ -378,14 +441,14 @@ async function saveTask() {
 
     const title = document.getElementById('taskTitle').value.trim();
     if (!title) {
-        errorEl.textContent = 'Tiêu đề không được để trống';
+        errorEl.textContent = 'Tieu de khong duoc de trong';
         return;
     }
 
     const maxAssignees = parseInt(document.getElementById('taskMaxAssignees').value) || 3;
     const assignedTo = getSelectedAssignees();
     if (assignedTo.length > maxAssignees) {
-        errorEl.textContent = `Tối đa giao cho ${maxAssignees} người`;
+        errorEl.textContent = `Toi da giao cho ${maxAssignees} nguoi`;
         return;
     }
 
@@ -411,15 +474,15 @@ async function saveTask() {
         const data = await res.json();
 
         if (!res.ok) {
-            errorEl.textContent = data.error || 'Lỗi lưu task';
+            errorEl.textContent = data.error || 'Loi luu task';
             return;
         }
 
         closeTaskModal();
         await loadTasks();
-        showToast(taskId ? 'Đã cập nhật task' : 'Đã tạo task mới', 'success');
+        showToast(taskId ? 'Da cap nhat task' : 'Da tao task moi', 'success');
     } catch (err) {
-        errorEl.textContent = 'Lỗi kết nối server';
+        errorEl.textContent = 'Loi ket noi server';
     }
 }
 
@@ -429,14 +492,14 @@ async function confirmDelete() {
     try {
         const res = await fetch(`/api/tasks/${deleteTaskId}`, { method: 'DELETE' });
         if (!res.ok) {
-            showToast('Lỗi xóa task', 'error');
+            showToast('Loi xoa task', 'error');
             return;
         }
         closeDeleteModal();
         await loadTasks();
-        showToast('Đã xóa task', 'success');
+        showToast('Da xoa task', 'success');
     } catch (err) {
-        showToast('Lỗi kết nối', 'error');
+        showToast('Loi ket noi', 'error');
     }
 }
 
@@ -462,12 +525,12 @@ function escapeHtml(text) {
 }
 
 function getPriorityLabel(priority) {
-    const labels = { low: 'Thấp', medium: 'TB', high: 'Cao' };
+    const labels = { low: 'Thap', medium: 'TB', high: 'Cao' };
     return labels[priority] || priority;
 }
 
 function getStatusLabel(status) {
-    const labels = { pending: 'Chờ xử lý', in_progress: 'Đang thực hiện', done: 'Hoàn thành' };
+    const labels = { pending: 'Cho xu ly', in_progress: 'Dang thuc hien', done: 'Hoan thanh' };
     return labels[status] || status;
 }
 
