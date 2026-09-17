@@ -74,6 +74,12 @@ def init_db():
             created_by INTEGER,
             FOREIGN KEY (created_by) REFERENCES users(id)
         );
+        CREATE TABLE IF NOT EXISTS fund (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL DEFAULT 'Quỹ chung',
+            balance REAL DEFAULT 0,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
     ''')
     admin = conn.execute('SELECT id FROM users WHERE username = ?', ('admin',)).fetchone()
     if not admin:
@@ -646,6 +652,73 @@ def api_add_points():
     return jsonify({'message': 'Đã cập nhật điểm'})
 
 
+# ==================== FUND API ====================
+
+def get_fund(conn):
+    fund = conn.execute('SELECT * FROM fund LIMIT 1').fetchone()
+    if not fund:
+        conn.execute("INSERT INTO fund (name, balance) VALUES ('Quỹ chung', 0)")
+        conn.commit()
+        fund = conn.execute('SELECT * FROM fund LIMIT 1').fetchone()
+    return dict(fund)
+
+
+@app.route('/api/fund')
+@login_required
+@admin_required
+def api_fund_get():
+    conn = get_db()
+    fund = get_fund(conn)
+    conn.close()
+    return jsonify(fund)
+
+
+@app.route('/api/fund', methods=['PUT'])
+@login_required
+@admin_required
+def api_fund_update():
+    data = request.get_json()
+    amount = data.get('amount', 0)
+    try:
+        amount = float(amount)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Số tiền không hợp lệ'}), 400
+
+    conn = get_db()
+    fund = get_fund(conn)
+    new_balance = fund['balance'] + amount
+    if new_balance < 0:
+        conn.close()
+        return jsonify({'error': 'Số dư quỹ không đủ'}), 400
+
+    conn.execute('UPDATE fund SET balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', (new_balance, fund['id']))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã cập nhật quỹ', 'balance': new_balance})
+
+
+@app.route('/api/fund/set', methods=['PUT'])
+@login_required
+@admin_required
+def api_fund_set():
+    data = request.get_json()
+    amount = data.get('amount', 0)
+    try:
+        amount = float(amount)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Số tiền không hợp lệ'}), 400
+
+    if amount < 0:
+        return jsonify({'error': 'Số tiền phải >= 0'}), 400
+
+    conn = get_db()
+    fund = get_fund(conn)
+    conn.execute('UPDATE fund SET balance = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', (amount, fund['id']))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã设置 quỹ', 'balance': amount})
+
+
 # ==================== FINANCE API ====================
 
 @app.route('/api/finance')
@@ -668,13 +741,15 @@ def api_finance_list():
 @admin_required
 def api_finance_summary():
     conn = get_db()
-    income = conn.execute('SELECT COALESCE(SUM(amount), 0) as total FROM finance WHERE type = ?').fetchone()['total']
-    expense = conn.execute('SELECT COALESCE(SUM(amount), 0) as total FROM finance WHERE type = ?').fetchone()['total']
+    income = conn.execute("SELECT COALESCE(SUM(amount), 0) as total FROM finance WHERE type = 'income'").fetchone()['total']
+    expense = conn.execute("SELECT COALESCE(SUM(amount), 0) as total FROM finance WHERE type = 'expense'").fetchone()['total']
+    fund = get_fund(conn)
     conn.close()
     return jsonify({
         'income': income,
         'expense': expense,
-        'balance': income - expense
+        'balance': income - expense,
+        'fund': fund['balance']
     })
 
 
@@ -700,11 +775,21 @@ def api_finance_create():
         return jsonify({'error': 'Số tiền phải lớn hơn 0'}), 400
 
     conn = get_db()
+
+    if trans_type == 'expense':
+        fund = get_fund(conn)
+        if fund['balance'] < amount:
+            conn.close()
+            return jsonify({'error': f'Quỹ không đủ. Số dư quỹ: {int(fund["balance"]):,} VND'}), 400
+        conn.execute('UPDATE fund SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                     (amount, fund['id']))
+
     conn.execute('INSERT INTO finance (type, amount, description, category, created_by) VALUES (?, ?, ?, ?, ?)',
                  (trans_type, amount, description, category, session['user_id']))
     conn.commit()
+    fund = get_fund(conn)
     conn.close()
-    return jsonify({'message': 'Đã thêm giao dịch'}), 201
+    return jsonify({'message': 'Đã thêm giao dịch', 'fund': fund['balance']}), 201
 
 
 @app.route('/api/finance/<int:finance_id>', methods=['DELETE'])
@@ -712,6 +797,11 @@ def api_finance_create():
 @admin_required
 def api_finance_delete(finance_id):
     conn = get_db()
+    trans = conn.execute('SELECT * FROM finance WHERE id = ?', (finance_id,)).fetchone()
+    if trans and trans['type'] == 'expense':
+        fund = get_fund(conn)
+        conn.execute('UPDATE fund SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                     (trans['amount'], fund['id']))
     conn.execute('DELETE FROM finance WHERE id = ?', (finance_id,))
     conn.commit()
     conn.close()

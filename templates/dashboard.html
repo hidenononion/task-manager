@@ -178,17 +178,18 @@
 
         <div id="financeView" class="list-view" style="display:none;">
             <div class="finance-summary">
+                <div class="finance-card fund">
+                    <div class="finance-label">Quỹ hiện tại</div>
+                    <div class="finance-amount" id="financeFund">0</div>
+                    <button class="btn btn-sm btn-secondary" onclick="openEditFundModal()" style="margin-top:10px;">Cập nhật quỹ</button>
+                </div>
                 <div class="finance-card income">
-                    <div class="finance-label">Thu</div>
+                    <div class="finance-label">Tổng thu</div>
                     <div class="finance-amount" id="financeIncome">0</div>
                 </div>
                 <div class="finance-card expense">
-                    <div class="finance-label">Chi</div>
+                    <div class="finance-label">Tổng chi</div>
                     <div class="finance-amount" id="financeExpense">0</div>
-                </div>
-                <div class="finance-card balance">
-                    <div class="finance-label">Số dư</div>
-                    <div class="finance-amount" id="financeBalance">0</div>
                 </div>
             </div>
             <div class="points-header">
@@ -367,7 +368,7 @@
                 <label>Loại giao dịch</label>
                 <select id="financeType" class="filter-select" style="width:100%;">
                     <option value="income">Thu</option>
-                    <option value="expense">Chi</option>
+                    <option value="expense">Chi (tự trừ quỹ)</option>
                 </select>
             </div>
             <div class="form-group">
@@ -387,6 +388,40 @@
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeAddFinanceModal()">Hủy</button>
             <button class="btn btn-primary" onclick="submitFinance()">Lưu</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Fund Modal -->
+<div id="editFundModal" class="modal">
+    <div class="modal-overlay" onclick="closeEditFundModal()"></div>
+    <div class="modal-content modal-small">
+        <div class="modal-header">
+            <h3>Cập nhật quỹ</h3>
+            <button class="modal-close" onclick="closeEditFundModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Số dư quỹ hiện tại</label>
+                <div id="fundCurrentBalance" style="font-size:24px;font-weight:800;color:var(--accent);margin-bottom:12px;">0 VND</div>
+            </div>
+            <div class="form-group">
+                <label>Thao tác</label>
+                <select id="fundAction" class="filter-select" style="width:100%;">
+                    <option value="set">Đặt lại số dư</option>
+                    <option value="add">Cộng thêm</option>
+                    <option value="subtract">Trừ bớt</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Số tiền</label>
+                <input type="number" id="fundAmount" min="0" placeholder="Nhập số tiền">
+            </div>
+            <div id="fundError" class="error-msg"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeEditFundModal()">Hủy</button>
+            <button class="btn btn-primary" onclick="submitFund()">Xác nhận</button>
         </div>
     </div>
 </div>

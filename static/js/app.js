@@ -315,7 +315,7 @@ async function loadFinance() {
         const summary = await summaryRes.json();
         document.getElementById('financeIncome').textContent = formatMoney(summary.income);
         document.getElementById('financeExpense').textContent = formatMoney(summary.expense);
-        document.getElementById('financeBalance').textContent = formatMoney(summary.balance);
+        document.getElementById('financeFund').textContent = formatMoney(summary.fund);
         const tbody = document.getElementById('financeTableBody');
         if (!transactions.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><p>Chưa có giao dịch</p></td></tr>'; return; }
         tbody.innerHTML = transactions.map(t => `<tr><td>${formatDate(t.date)}</td><td><span class="priority-tag ${t.type === 'income' ? 'low' : 'high'}">${t.type === 'income' ? 'Thu' : 'Chi'}</span></td><td><strong>${formatMoney(t.amount)}</strong></td><td>${escapeHtml(t.description) || '-'}</td><td>${escapeHtml(t.category) || '-'}</td><td><button class="btn-icon" onclick="deleteFinance(${t.id})">&#10005;</button></td></tr>`).join('');
@@ -483,4 +483,40 @@ function getStatusLabel(s) { return { pending: 'Chờ xử lý', in_progress: '�
 function formatDate(d) { return d ? new Date(d).toLocaleDateString('vi-VN') : ''; }
 function formatMoney(n) { return new Intl.NumberFormat('vi-VN').format(n) + ' VND'; }
 
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeTaskModal(); closeDeleteModal(); closeAddPointsModal(); closeAddFinanceModal(); closePointsDetailModal(); } });
+// ==================== FUND ====================
+async function openEditFundModal() {
+    try {
+        const res = await fetch('/api/fund');
+        const fund = await res.json();
+        document.getElementById('fundCurrentBalance').textContent = formatMoney(fund.balance);
+        document.getElementById('fundAmount').value = '';
+        document.getElementById('fundError').textContent = '';
+        document.getElementById('editFundModal').classList.add('active');
+    } catch (err) { showToast('Lỗi tải dữ liệu', 'error'); }
+}
+
+function closeEditFundModal() { document.getElementById('editFundModal').classList.remove('active'); }
+
+async function submitFund() {
+    const action = document.getElementById('fundAction').value;
+    const amount = document.getElementById('fundAmount').value;
+    const errorEl = document.getElementById('fundError');
+    if (!amount) { errorEl.textContent = 'Nhập số tiền'; return; }
+    try {
+        let res;
+        if (action === 'set') {
+            res = await fetch('/api/fund/set', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: parseFloat(amount) }) });
+        } else if (action === 'add') {
+            res = await fetch('/api/fund', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: parseFloat(amount) }) });
+        } else {
+            res = await fetch('/api/fund', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: -parseFloat(amount) }) });
+        }
+        const data = await res.json();
+        if (!res.ok) { errorEl.textContent = data.error; return; }
+        closeEditFundModal();
+        await loadFinance();
+        showToast('Đã cập nhật quỹ', 'success');
+    } catch (err) { errorEl.textContent = 'Lỗi kết nối'; }
+}
+
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeTaskModal(); closeDeleteModal(); closeAddPointsModal(); closeAddFinanceModal(); closePointsDetailModal(); closeEditFundModal(); } });

@@ -1677,6 +1677,9 @@ a:hover {
 .finance-card.income .finance-amount { color: var(--success); }
 .finance-card.expense .finance-amount { color: var(--danger); }
 .finance-card.balance .finance-amount { color: var(--accent); }
+.finance-card.fund .finance-amount { color: var(--warning); }
+
+.finance-card.fund::before { background: var(--warning); }
 
 @media (max-width: 768px) {
     .finance-summary {
