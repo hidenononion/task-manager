@@ -602,13 +602,20 @@ def api_update_status(task_id):
     if new_status == 'done' and old_status != 'done' and task['points'] and task['points'] > 0:
         assignees = cur.execute(q("SELECT user_id FROM task_assignments WHERE task_id = %s",
                                   "SELECT user_id FROM task_assignments WHERE task_id = ?"), (task_id,)).fetchall()
-        for a in assignees:
-            uid = a['user_id']
-            cur.execute(q("UPDATE users SET score = score + %s WHERE id = %s",
-                          "UPDATE users SET score = score + ? WHERE id = ?"), (task['points'], uid))
-            cur.execute(q("INSERT INTO points_log (user_id, points, reason, task_id, created_by) VALUES (%s, %s, %s, %s, %s)",
-                          "INSERT INTO points_log (user_id, points, reason, task_id, created_by) VALUES (?, ?, ?, ?, ?)"),
-                        (uid, task['points'], f"Hoàn thành task: {task['title']}", task_id, session['user_id']))
+        num_assignees = len(assignees)
+        if num_assignees > 0:
+            total_points = task['points']
+            points_per_person = total_points // num_assignees
+            remainder = total_points - (points_per_person * num_assignees)
+
+            for i, a in enumerate(assignees):
+                uid = a['user_id']
+                earned = points_per_person + (1 if i < remainder else 0)
+                cur.execute(q("UPDATE users SET score = score + %s WHERE id = %s",
+                              "UPDATE users SET score = score + ? WHERE id = ?"), (earned, uid))
+                cur.execute(q("INSERT INTO points_log (user_id, points, reason, task_id, created_by) VALUES (%s, %s, %s, %s, %s)",
+                              "INSERT INTO points_log (user_id, points, reason, task_id, created_by) VALUES (?, ?, ?, ?, ?)"),
+                            (uid, earned, f"Hoàn thành task: {task['title']} (chia đều từ {total_points} điểm cho {num_assignees} người)", task_id, session['user_id']))
 
     conn.commit()
     updated = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
