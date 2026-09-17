@@ -1566,3 +1566,138 @@ a:hover {
         padding: 14px;
     }
 }
+
+/* ===== POINTS SECTION ===== */
+.points-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+}
+
+.points-header h3 {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.my-points-card {
+    background: var(--bg-glass);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    padding: 40px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.my-points-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--accent), var(--success));
+}
+
+.my-points-score {
+    font-size: 56px;
+    font-weight: 900;
+    letter-spacing: -2px;
+    background: linear-gradient(135deg, var(--accent), var(--success));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+    margin-bottom: 8px;
+}
+
+.my-points-label {
+    font-size: 15px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* ===== FINANCE SECTION ===== */
+.finance-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.finance-card {
+    background: var(--bg-glass);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    transition: var(--transition);
+}
+
+.finance-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+}
+
+.finance-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+}
+
+.finance-card.income::before { background: var(--success); }
+.finance-card.expense::before { background: var(--danger); }
+.finance-card.balance::before { background: linear-gradient(90deg, var(--accent), var(--success)); }
+
+.finance-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.finance-amount {
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+}
+
+.finance-card.income .finance-amount { color: var(--success); }
+.finance-card.expense .finance-amount { color: var(--danger); }
+.finance-card.balance .finance-amount { color: var(--accent); }
+
+@media (max-width: 768px) {
+    .finance-summary {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    .finance-card {
+        padding: 16px;
+    }
+    .finance-amount {
+        font-size: 20px;
+    }
+    .my-points-score {
+        font-size: 40px;
+    }
+    .my-points-card {
+        padding: 28px;
+    }
+    .points-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+    }
+}

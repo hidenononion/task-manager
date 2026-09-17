@@ -13,13 +13,22 @@
                 <span class="nav-icon">&#9638;</span> Kanban Board
             </a>
             <a href="#" class="nav-item" data-view="list">
-                <span class="nav-icon">&#9776;</span> Danh sách
+                <span class="nav-icon">&#9776;</span> Danh sach
+            </a>
+            <a href="#" class="nav-item admin-only" data-view="points" style="display:none;">
+                <span class="nav-icon">&#11088;</span> Diem tong hop
+            </a>
+            <a href="#" class="nav-item admin-only" data-view="finance" style="display:none;">
+                <span class="nav-icon">&#128176;</span> Tai chinh
+            </a>
+            <a href="#" class="nav-item user-only" data-view="my-points" style="display:none;">
+                <span class="nav-icon">&#11088;</span> Diem cua toi
             </a>
         </nav>
         <div class="sidebar-footer">
             <button class="theme-toggle" onclick="toggleTheme()">
                 <span class="icon" id="themeIcon">&#9790;</span>
-                <span id="themeLabel">Chế độ sáng</span>
+                <span id="themeLabel">Che do sang</span>
             </button>
             <div class="user-info">
                 <div class="user-avatar" id="userAvatar">A</div>
@@ -28,36 +37,34 @@
                     <span id="userRole" class="badge">user</span>
                 </div>
             </div>
-            <button class="btn btn-logout" onclick="logout()">Đăng xuất</button>
+            <button class="btn btn-logout" onclick="logout()">Dang xuat</button>
         </div>
     </aside>
 
-    <!-- Sidebar overlay for mobile -->
     <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
 
-    <!-- Main Content -->
     <main class="main-content">
         <!-- Stats Cards -->
         <div class="stats-grid" id="statsGrid">
             <div class="stat-card total">
                 <div class="stat-icon">&#128203;</div>
                 <div class="stat-value" id="statTotal">0</div>
-                <div class="stat-label">Tổng nhiệm vụ</div>
+                <div class="stat-label">Tong nhiem vu</div>
             </div>
             <div class="stat-card pending">
                 <div class="stat-icon">&#9203;</div>
                 <div class="stat-value" id="statPending">0</div>
-                <div class="stat-label">Chờ xử lý</div>
+                <div class="stat-label">Cho xu ly</div>
             </div>
             <div class="stat-card in-progress">
                 <div class="stat-icon">&#9654;</div>
                 <div class="stat-value" id="statInProgress">0</div>
-                <div class="stat-label">Đang thực hiện</div>
+                <div class="stat-label">Dang thuc hien</div>
             </div>
             <div class="stat-card done">
                 <div class="stat-icon">&#10003;</div>
                 <div class="stat-value" id="statDone">0</div>
-                <div class="stat-label">Hoàn thành</div>
+                <div class="stat-label">Hoan thanh</div>
             </div>
         </div>
 
@@ -66,28 +73,28 @@
             <div class="header-left">
                 <button class="hamburger" id="hamburger" onclick="toggleSidebar()">&#9776;</button>
                 <h2 id="viewTitle">Kanban Board</h2>
-                <span class="task-count" id="taskCount">0 nhiệm vụ</span>
+                <span class="task-count" id="taskCount">0 nhiem vu</span>
             </div>
             <div class="header-right">
                 <div class="search-bar">
                     <span class="search-icon">&#128269;</span>
-                    <input type="text" id="searchInput" placeholder="Tìm nhiệm vụ..." oninput="renderTasks()">
+                    <input type="text" id="searchInput" placeholder="Tim nhiem vu..." oninput="renderTasks()">
                 </div>
                 <div class="filters">
                     <select id="filterPriority" class="filter-select" onchange="renderTasks()">
-                        <option value="">Tất cả ưu tiên</option>
-                        <option value="low">Thấp</option>
-                        <option value="medium">Trung bình</option>
+                        <option value="">Tat ca uu tien</option>
+                        <option value="low">Thap</option>
+                        <option value="medium">Trung binh</option>
                         <option value="high">Cao</option>
                     </select>
                     <select id="filterStatus" class="filter-select" onchange="renderTasks()">
-                        <option value="">Tất cả trạng thái</option>
-                        <option value="pending">Chờ xử lý</option>
-                        <option value="in_progress">Đang thực hiện</option>
-                        <option value="done">Hoàn thành</option>
+                        <option value="">Tat ca trang thai</option>
+                        <option value="pending">Cho xu ly</option>
+                        <option value="in_progress">Dang thuc hien</option>
+                        <option value="done">Hoan thanh</option>
                     </select>
                 </div>
-                <button class="btn btn-primary" id="addTaskBtn" onclick="openTaskModal()">+ Thêm nhiệm vụ</button>
+                <button class="btn btn-primary admin-only" id="addTaskBtn" onclick="openTaskModal()" style="display:none;">+ Them nhiem vu</button>
             </div>
         </header>
 
@@ -96,7 +103,7 @@
             <div class="kanban-column" data-status="pending">
                 <div class="column-header">
                     <span class="column-dot pending"></span>
-                    <h3>Chờ xử lý</h3>
+                    <h3>Cho xu ly</h3>
                     <span class="column-count" id="pendingCount">0</span>
                 </div>
                 <div class="column-body" id="pendingTasks"></div>
@@ -104,7 +111,7 @@
             <div class="kanban-column" data-status="in_progress">
                 <div class="column-header">
                     <span class="column-dot in_progress"></span>
-                    <h3>Đang thực hiện</h3>
+                    <h3>Dang thuc hien</h3>
                     <span class="column-count" id="inProgressCount">0</span>
                 </div>
                 <div class="column-body" id="inProgressTasks"></div>
@@ -112,7 +119,7 @@
             <div class="kanban-column" data-status="done">
                 <div class="column-header">
                     <span class="column-dot done"></span>
-                    <h3>Hoàn thành</h3>
+                    <h3>Hoan thanh</h3>
                     <span class="column-count" id="doneCount">0</span>
                 </div>
                 <div class="column-body" id="doneTasks"></div>
@@ -124,16 +131,90 @@
             <table class="task-table">
                 <thead>
                     <tr>
-                        <th>Nhiệm vụ</th>
-                        <th>Trạng thái</th>
-                        <th>Ưu tiên</th>
-                        <th>Người thực hiện</th>
+                        <th>Nhiem vu</th>
+                        <th>Trang thai</th>
+                        <th>Uu tien</th>
+                        <th>Nguoi thuc hien</th>
                         <th>Slot</th>
-                        <th>Hạn chót</th>
-                        <th>Thao tác</th>
+                        <th>Diem</th>
+                        <th>Han chot</th>
+                        <th>Thao tac</th>
                     </tr>
                 </thead>
                 <tbody id="taskTableBody"></tbody>
+            </table>
+        </div>
+
+        <!-- Points View (Admin/Bi thu) -->
+        <div id="pointsView" class="list-view" style="display:none;">
+            <div class="points-header">
+                <h3>Bang diem tong hop</h3>
+                <button class="btn btn-primary" onclick="openAddPointsModal()">+ Cong diem</button>
+            </div>
+            <table class="task-table">
+                <thead>
+                    <tr>
+                        <th>STT</th>
+                        <th>Doan vien</th>
+                        <th>Tong diem</th>
+                        <th>Thao tac</th>
+                    </tr>
+                </thead>
+                <tbody id="pointsTableBody"></tbody>
+            </table>
+        </div>
+
+        <!-- My Points View (User) -->
+        <div id="myPointsView" class="list-view" style="display:none;">
+            <div class="my-points-card">
+                <div class="my-points-score" id="myScore">0</div>
+                <div class="my-points-label">Tong diem cua ban</div>
+            </div>
+            <h3 style="margin: 20px 0 12px;">Lich su diem</h3>
+            <table class="task-table">
+                <thead>
+                    <tr>
+                        <th>Ngay</th>
+                        <th>Diem</th>
+                        <th>Ly do</th>
+                    </tr>
+                </thead>
+                <tbody id="myPointsLogBody"></tbody>
+            </table>
+        </div>
+
+        <!-- Finance View (Admin/Bi thu) -->
+        <div id="financeView" class="list-view" style="display:none;">
+            <div class="finance-summary">
+                <div class="finance-card income">
+                    <div class="finance-label">Thu</div>
+                    <div class="finance-amount" id="financeIncome">0</div>
+                </div>
+                <div class="finance-card expense">
+                    <div class="finance-label">Chi</div>
+                    <div class="finance-amount" id="financeExpense">0</div>
+                </div>
+                <div class="finance-card balance">
+                    <div class="finance-label">So du</div>
+                    <div class="finance-amount" id="financeBalance">0</div>
+                </div>
+            </div>
+            <div class="points-header">
+                <h3>Lich su giao dich</h3>
+                <button class="btn btn-primary" onclick="openAddFinanceModal()">+ Them giao dich</button>
+            </div>
+            <table class="task-table">
+                <thead>
+                    <tr>
+                        <th>Ngay</th>
+                        <th>Loai</th>
+                        <th>So tien</th>
+                        <th>Mo ta</th>
+                        <th>Loai chi</th>
+                        <th>Thao tac</th>
+                    </tr>
+                </thead>
+                <tbody id="financeTableBody"></tbody>
             </table>
         </div>
     </main>
@@ -144,80 +225,180 @@
     <div class="modal-overlay" onclick="closeTaskModal()"></div>
     <div class="modal-content">
         <div class="modal-header">
-            <h3 id="modalTitle">Thêm nhiệm vụ mới</h3>
+            <h3 id="modalTitle">Them nhiem vu moi</h3>
             <button class="modal-close" onclick="closeTaskModal()">&times;</button>
         </div>
         <form id="taskForm" class="modal-body">
             <input type="hidden" id="taskId">
             <div class="form-group">
-                <label for="taskTitle">Tiêu đề *</label>
-                <input type="text" id="taskTitle" placeholder="Nhập tiêu đề nhiệm vụ" required>
+                <label for="taskTitle">Tieu de *</label>
+                <input type="text" id="taskTitle" placeholder="Nhap tieu de nhiem vu" required>
             </div>
             <div class="form-group">
-                <label for="taskDesc">Mô tả</label>
-                <textarea id="taskDesc" rows="3" placeholder="Mô tả chi tiết..."></textarea>
+                <label for="taskDesc">Mo ta</label>
+                <textarea id="taskDesc" rows="3" placeholder="Mo ta chi tiet..."></textarea>
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label for="taskStatus">Trạng thái</label>
+                    <label for="taskStatus">Trang thai</label>
                     <select id="taskStatus">
-                        <option value="pending">Chờ xử lý</option>
-                        <option value="in_progress">Đang thực hiện</option>
-                        <option value="done">Hoàn thành</option>
+                        <option value="pending">Cho xu ly</option>
+                        <option value="in_progress">Dang thuc hien</option>
+                        <option value="done">Hoan thanh</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="taskPriority">Ưu tiên</label>
+                    <label for="taskPriority">Uu tien</label>
                     <select id="taskPriority">
-                        <option value="low">Thấp</option>
-                        <option value="medium" selected>Trung bình</option>
+                        <option value="low">Thap</option>
+                        <option value="medium" selected>Trung binh</option>
                         <option value="high">Cao</option>
                     </select>
                 </div>
             </div>
             <div class="form-group">
-                <label>Giao cho (tối đa 3 người)</label>
+                <label>Giao cho (toi da 3 nguoi)</label>
                 <div id="taskAssignees" class="checkbox-group"></div>
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label for="taskMaxAssignees">Số người tối đa nhận task</label>
+                    <label for="taskMaxAssignees">So nguoi toi da nhan task</label>
                     <input type="number" id="taskMaxAssignees" min="1" max="10" value="3">
                 </div>
                 <div class="form-group">
-                    <label for="taskDueDate">Hạn chót</label>
+                    <label for="taskDueDate">Han chot</label>
                     <input type="date" id="taskDueDate">
                 </div>
+            </div>
+            <div class="form-group">
+                <label for="taskPoints">Diem khi hoan thanh</label>
+                <input type="number" id="taskPoints" min="0" value="0" placeholder="0">
             </div>
             <div id="taskFormError" class="error-msg"></div>
         </form>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeTaskModal()">Hủy</button>
-            <button class="btn btn-primary" onclick="saveTask()">Lưu</button>
+            <button class="btn btn-secondary" onclick="closeTaskModal()">Huy</button>
+            <button class="btn btn-primary" onclick="saveTask()">Luu</button>
         </div>
     </div>
 </div>
 
-<!-- Confirm Delete Modal -->
+<!-- Delete Modal -->
 <div id="deleteModal" class="modal">
     <div class="modal-overlay" onclick="closeDeleteModal()"></div>
     <div class="modal-content modal-small">
         <div class="modal-header">
-            <h3>Xác nhận xóa</h3>
+            <h3>Xac nhan xoa</h3>
             <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
         </div>
         <div class="modal-body">
-            <p>Bạn có chắc muốn xóa nhiệm vụ này?</p>
+            <p>Ban co chac muon xoa nhiem vu nay?</p>
             <p id="deleteTaskName" class="delete-task-name"></p>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeDeleteModal()">Hủy</button>
-            <button class="btn btn-danger" onclick="confirmDelete()">Xóa</button>
+            <button class="btn btn-secondary" onclick="closeDeleteModal()">Huy</button>
+            <button class="btn btn-danger" onclick="confirmDelete()">Xoa</button>
         </div>
     </div>
 </div>
 
-<!-- Toast Notification -->
+<!-- Add Points Modal -->
+<div id="addPointsModal" class="modal">
+    <div class="modal-overlay" onclick="closeAddPointsModal()"></div>
+    <div class="modal-content modal-small">
+        <div class="modal-header">
+            <h3>Cong/tru diem</h3>
+            <button class="modal-close" onclick="closeAddPointsModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Doan vien</label>
+                <select id="pointsUserId" class="filter-select" style="width:100%;"></select>
+            </div>
+            <div class="form-group">
+                <label>Diem (cong +, tru -)</label>
+                <input type="number" id="pointsValue" placeholder="VD: 10 hoac -5">
+            </div>
+            <div class="form-group">
+                <label>Ly do</label>
+                <input type="text" id="pointsReason" placeholder="Nhap ly do">
+            </div>
+            <div id="pointsError" class="error-msg"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeAddPointsModal()">Huy</button>
+            <button class="btn btn-primary" onclick="submitPoints()">Xac nhan</button>
+        </div>
+    </div>
+</div>
+
+<!-- Points Detail Modal -->
+<div id="pointsDetailModal" class="modal">
+    <div class="modal-overlay" onclick="closePointsDetailModal()"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="pointsDetailTitle">Chi tiet diem</h3>
+            <button class="modal-close" onclick="closePointsDetailModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="my-points-card" style="margin-bottom:16px;">
+                <div class="my-points-score" id="pointsDetailScore">0</div>
+                <div class="my-points-label">Tong diem</div>
+            </div>
+            <table class="task-table">
+                <thead>
+                    <tr>
+                        <th>Ngay</th>
+                        <th>Diem</th>
+                        <th>Ly do</th>
+                    </tr>
+                </thead>
+                <tbody id="pointsDetailLogBody"></tbody>
+            </table>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closePointsDetailModal()">Dong</button>
+        </div>
+    </div>
+</div>
+
+<!-- Add Finance Modal -->
+<div id="addFinanceModal" class="modal">
+    <div class="modal-overlay" onclick="closeAddFinanceModal()"></div>
+    <div class="modal-content modal-small">
+        <div class="modal-header">
+            <h3>Them giao dich</h3>
+            <button class="modal-close" onclick="closeAddFinanceModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Loai giao dich</label>
+                <select id="financeType" class="filter-select" style="width:100%;">
+                    <option value="income">Thu</option>
+                    <option value="expense">Chi</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>So tien</label>
+                <input type="number" id="financeAmount" min="0" placeholder="Nhap so tien">
+            </div>
+            <div class="form-group">
+                <label>Mo ta</label>
+                <input type="text" id="financeDesc" placeholder="Nhap mo ta">
+            </div>
+            <div class="form-group">
+                <label>Loai chi / Nhom</label>
+                <input type="text" id="financeCategory" placeholder="VD: An uong, Van phong...">
+            </div>
+            <div id="financeError" class="error-msg"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeAddFinanceModal()">Huy</button>
+            <button class="btn btn-primary" onclick="submitFinance()">Luu</button>
+        </div>
+    </div>
+</div>
+
 <div id="toast" class="toast"></div>
 {% endblock %}
 {% block scripts %}

@@ -1,6 +1,7 @@
 let currentUser = null;
 let allTasks = [];
 let allUsers = [];
+let allPoints = [];
 let currentView = 'kanban';
 let deleteTaskId = null;
 
@@ -16,27 +17,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function loadUser() {
     try {
         const res = await fetch('/api/me');
-        if (!res.ok) {
-            window.location.href = '/login';
-            return;
-        }
+        if (!res.ok) { window.location.href = '/login'; return; }
         currentUser = await res.json();
         document.getElementById('userName').textContent = currentUser.username;
         document.getElementById('userAvatar').textContent = currentUser.username[0].toUpperCase();
         const roleEl = document.getElementById('userRole');
         roleEl.textContent = currentUser.role;
-        if (currentUser.role === 'admin') {
-            roleEl.classList.add('badge-admin');
-            document.getElementById('addTaskBtn').style.display = 'inline-flex';
-        } else {
-            document.getElementById('addTaskBtn').style.display = 'none';
+        if (currentUser.role === 'admin') roleEl.classList.add('badge-admin');
+
+        const isAdminOrBithu = currentUser.role === 'admin' || currentUser.role === 'bithu';
+        document.querySelectorAll('.admin-only').forEach(el => el.style.display = isAdminOrBithu ? '' : 'none');
+        document.querySelectorAll('.user-only').forEach(el => el.style.display = !isAdminOrBithu ? '' : 'none');
+        if (document.getElementById('addTaskBtn')) {
+            document.getElementById('addTaskBtn').style.display = isAdminOrBithu ? 'inline-flex' : 'none';
         }
-    } catch (err) {
-        window.location.href = '/login';
-    }
+    } catch (err) { window.location.href = '/login'; }
 }
 
-// ==================== SIDEBAR TOGGLE ====================
+// ==================== SIDEBAR ====================
 function toggleSidebar() {
     document.querySelector('.sidebar').classList.toggle('open');
     document.querySelector('.sidebar-overlay').classList.toggle('active');
@@ -58,15 +56,8 @@ function toggleTheme() {
 }
 
 function updateThemeUI(theme) {
-    const icon = document.getElementById('themeIcon');
-    const label = document.getElementById('themeLabel');
-    if (theme === 'dark') {
-        icon.innerHTML = '&#9790;';
-        label.textContent = 'Chế độ sáng';
-    } else {
-        icon.innerHTML = '&#9728;';
-        label.textContent = 'Chế độ tối';
-    }
+    document.getElementById('themeIcon').innerHTML = theme === 'dark' ? '&#9790;' : '&#9728;';
+    document.getElementById('themeLabel').textContent = theme === 'dark' ? 'Che do sang' : 'Che do toi';
 }
 
 // ==================== NAV ====================
@@ -77,28 +68,34 @@ function setupNav() {
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
             item.classList.add('active');
             currentView = item.dataset.view;
-            document.getElementById('viewTitle').textContent =
-                currentView === 'kanban' ? 'Kanban Board' : 'Danh sách';
-            document.getElementById('kanbanView').style.display = currentView === 'kanban' ? 'flex' : 'none';
-            document.getElementById('listView').style.display = currentView === 'list' ? 'block' : 'none';
+
+            const views = ['kanbanView', 'listView', 'pointsView', 'myPointsView', 'financeView'];
+            views.forEach(v => { const el = document.getElementById(v); if (el) el.style.display = 'none'; });
+
+            const titles = { kanban: 'Kanban Board', list: 'Danh sach', points: 'Diem tong hop', 'my-points': 'Diem cua toi', finance: 'Tai chinh' };
+            document.getElementById('viewTitle').textContent = titles[currentView] || '';
+            document.getElementById('statsGrid').style.display = ['kanban', 'list'].includes(currentView) ? '' : 'none';
+
+            if (currentView === 'kanban') document.getElementById('kanbanView').style.display = 'flex';
+            else if (currentView === 'list') document.getElementById('listView').style.display = 'block';
+            else if (currentView === 'points') loadPoints();
+            else if (currentView === 'my-points') loadMyPoints();
+            else if (currentView === 'finance') loadFinance();
         });
     });
 }
 
-// ==================== FILTERS & SEARCH ====================
+// ==================== FILTERS ====================
 function getFilteredTasks() {
     const priority = document.getElementById('filterPriority').value;
     const status = document.getElementById('filterStatus').value;
     const search = document.getElementById('searchInput').value.toLowerCase().trim();
-
     return allTasks.filter(t => {
         if (priority && t.priority !== priority) return false;
         if (status && t.status !== status) return false;
         if (search) {
-            const matchTitle = t.title.toLowerCase().includes(search);
-            const matchDesc = (t.description || '').toLowerCase().includes(search);
-            const matchUser = t.assigned_users.some(u => u.username.toLowerCase().includes(search));
-            if (!matchTitle && !matchDesc && !matchUser) return false;
+            if (!t.title.toLowerCase().includes(search) && !(t.description || '').toLowerCase().includes(search) &&
+                !t.assigned_users.some(u => u.username.toLowerCase().includes(search))) return false;
         }
         return true;
     });
@@ -110,9 +107,7 @@ async function loadTasks() {
         const res = await fetch('/api/tasks');
         allTasks = await res.json();
         renderTasks();
-    } catch (err) {
-        showToast('Lỗi tải dữ liệu', 'error');
-    }
+    } catch (err) { showToast('Loi tai du lieu', 'error'); }
 }
 
 async function loadUsers() {
@@ -124,24 +119,17 @@ async function loadUsers() {
 }
 
 function populateAssigneeCheckboxes() {
-    const container = document.getElementById('taskAssignees');
-    container.innerHTML = allUsers.map(u => `
-        <label class="checkbox-label">
-            <input type="checkbox" name="assignee" value="${u.id}">
-            <span>${escapeHtml(u.username)}</span>
-        </label>
-    `).join('');
+    document.getElementById('taskAssignees').innerHTML = allUsers.map(u =>
+        `<label class="checkbox-label"><input type="checkbox" name="assignee" value="${u.id}"><span>${escapeHtml(u.username)}</span></label>`
+    ).join('');
 }
 
 function getSelectedAssignees() {
-    return Array.from(document.querySelectorAll('input[name="assignee"]:checked'))
-        .map(cb => parseInt(cb.value));
+    return Array.from(document.querySelectorAll('input[name="assignee"]:checked')).map(cb => parseInt(cb.value));
 }
 
-function setSelectedAssignees(userIds) {
-    document.querySelectorAll('input[name="assignee"]').forEach(cb => {
-        cb.checked = userIds.includes(parseInt(cb.value));
-    });
+function setSelectedAssignees(ids) {
+    document.querySelectorAll('input[name="assignee"]').forEach(cb => cb.checked = ids.includes(parseInt(cb.value)));
 }
 
 // ==================== STATS ====================
@@ -150,7 +138,6 @@ function updateStats() {
     const pending = allTasks.filter(t => t.status === 'pending').length;
     const inProgress = allTasks.filter(t => t.status === 'in_progress').length;
     const done = allTasks.filter(t => t.status === 'done').length;
-
     animateCounter('statTotal', total);
     animateCounter('statPending', pending);
     animateCounter('statInProgress', inProgress);
@@ -159,235 +146,247 @@ function updateStats() {
 
 function animateCounter(id, target) {
     const el = document.getElementById(id);
+    if (!el) return;
     const current = parseInt(el.textContent) || 0;
     if (current === target) return;
-
     const step = target > current ? 1 : -1;
     const diff = Math.abs(target - current);
     const duration = Math.min(300, diff * 50);
-    const interval = duration / diff;
-
+    const interval = duration / diff || 1;
     let count = current;
-    const timer = setInterval(() => {
-        count += step;
-        el.textContent = count;
-        if (count === target) clearInterval(timer);
-    }, interval);
+    const timer = setInterval(() => { count += step; el.textContent = count; if (count === target) clearInterval(timer); }, interval);
 }
 
 // ==================== RENDER ====================
 function renderTasks() {
     const tasks = getFilteredTasks();
-    document.getElementById('taskCount').textContent = `${tasks.length} nhiệm vụ`;
+    document.getElementById('taskCount').textContent = `${tasks.length} nhiem vu`;
     updateStats();
-
-    if (currentView === 'kanban') {
-        renderKanban(tasks);
-    } else {
-        renderList(tasks);
-    }
+    if (currentView === 'kanban') renderKanban(tasks);
+    else if (currentView === 'list') renderList(tasks);
 }
 
 function renderKanban(tasks) {
     const pending = tasks.filter(t => t.status === 'pending');
     const inProgress = tasks.filter(t => t.status === 'in_progress');
     const done = tasks.filter(t => t.status === 'done');
-
     document.getElementById('pendingCount').textContent = pending.length;
     document.getElementById('inProgressCount').textContent = inProgress.length;
     document.getElementById('doneCount').textContent = done.length;
-
-    document.getElementById('pendingTasks').innerHTML = pending.length ?
-        pending.map(t => createTaskCard(t)).join('') :
-        '<div class="empty-state"><p>Không có task nào</p></div>';
-
-    document.getElementById('inProgressTasks').innerHTML = inProgress.length ?
-        inProgress.map(t => createTaskCard(t)).join('') :
-        '<div class="empty-state"><p>Không có task nào</p></div>';
-
-    document.getElementById('doneTasks').innerHTML = done.length ?
-        done.map(t => createTaskCard(t)).join('') :
-        '<div class="empty-state"><p>Không có task nào</p></div>';
+    document.getElementById('pendingTasks').innerHTML = pending.length ? pending.map(createTaskCard).join('') : '<div class="empty-state"><p>Khong co task nao</p></div>';
+    document.getElementById('inProgressTasks').innerHTML = inProgress.length ? inProgress.map(createTaskCard).join('') : '<div class="empty-state"><p>Khong co task nao</p></div>';
+    document.getElementById('doneTasks').innerHTML = done.length ? done.map(createTaskCard).join('') : '<div class="empty-state"><p>Khong co task nao</p></div>';
 }
 
 function createTaskCard(task) {
-    const isAdmin = currentUser.role === 'admin';
+    const isAdmin = currentUser.role === 'admin' || currentUser.role === 'bithu';
     const isClaimed = task.is_claimed_by_me;
     const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
-    const slotsLeft = task.slots_left;
-    const canClaim = !isAdmin && !isClaimed && slotsLeft > 0 && task.status !== 'done';
+    const canClaim = !isAdmin && !isClaimed && task.slots_left > 0 && task.status !== 'done';
 
     let adminActions = '';
     if (isAdmin) {
-        adminActions = `
-            <button class="btn-icon" onclick="openEditModal(${task.id})" title="Sua">&#9998;</button>
-            <button class="btn-icon" onclick="openDeleteModal(${task.id}, '${escapeHtml(task.title)}')" title="Xoa">&#10005;</button>
-        `;
+        adminActions = `<button class="btn-icon" onclick="openEditModal(${task.id})" title="Sua">&#9998;</button><button class="btn-icon" onclick="openDeleteModal(${task.id}, '${escapeHtml(task.title)}')" title="Xoa">&#10005;</button>`;
     }
 
-    const assigneeTags = task.assigned_users.map(u =>
-        `<span class="assignee-tag">@${escapeHtml(u.username)}</span>`
-    ).join('');
-
+    const assigneeTags = task.assigned_users.map(u => `<span class="assignee-tag">@${escapeHtml(u.username)}</span>`).join('');
     const slotInfo = `<span class="slot-info">${task.assignee_count}/${task.max_assignees}</span>`;
+    const pointsTag = task.points > 0 ? `<span class="priority-tag low">+${task.points} diem</span>` : '';
 
     let claimBtn = '';
-    if (canClaim) {
-        claimBtn = `<button class="btn btn-claim" onclick="claimTask(${task.id})">Nhan task</button>`;
-    } else if (isClaimed && !isAdmin) {
-        claimBtn = `<button class="btn btn-unclaim" onclick="unclaimTask(${task.id})">Bo nhan</button>`;
-    }
+    if (canClaim) claimBtn = `<button class="btn btn-claim" onclick="claimTask(${task.id})">Nhan task</button>`;
+    else if (isClaimed && !isAdmin) claimBtn = `<button class="btn btn-unclaim" onclick="unclaimTask(${task.id})">Bo nhan</button>`;
 
     let statusSelect = '';
     if (isClaimed || isAdmin) {
-        statusSelect = `
-            <select class="status-select" onchange="changeStatus(${task.id}, this.value)">
-                <option value="pending" ${task.status === 'pending' ? 'selected' : ''}>Cho xu ly</option>
-                <option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>Dang thuc hien</option>
-                <option value="done" ${task.status === 'done' ? 'selected' : ''}>Hoan thanh</option>
-            </select>
-        `;
+        statusSelect = `<select class="status-select" onchange="changeStatus(${task.id}, this.value)">
+            <option value="pending" ${task.status === 'pending' ? 'selected' : ''}>Cho xu ly</option>
+            <option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>Dang thuc hien</option>
+            <option value="done" ${task.status === 'done' ? 'selected' : ''}>Hoan thanh</option>
+        </select>`;
     }
 
-    return `
-        <div class="task-card" data-id="${task.id}">
-            <div class="task-card-header">
-                <div class="task-card-title">${escapeHtml(task.title)}</div>
-                <div class="task-card-actions">${adminActions}</div>
-            </div>
-            ${task.description ? `<div class="task-card-desc">${escapeHtml(task.description)}</div>` : ''}
-            <div class="task-card-footer">
-                <div class="task-card-meta">
-                    <span class="priority-tag ${task.priority}">${getPriorityLabel(task.priority)}</span>
-                    ${assigneeTags || '<span class="assignee-tag" style="color:var(--text-muted)">Chua ai nhan</span>'}
-                    ${slotInfo}
-                    ${task.due_date ? `<span class="due-date ${isOverdue ? 'overdue' : ''}">${formatDate(task.due_date)}</span>` : ''}
-                </div>
-                <div class="task-card-actions-row">
-                    ${statusSelect}
-                    ${claimBtn}
-                </div>
-            </div>
+    return `<div class="task-card" data-id="${task.id}">
+        <div class="task-card-header">
+            <div class="task-card-title">${escapeHtml(task.title)}</div>
+            <div class="task-card-actions">${adminActions}</div>
         </div>
-    `;
+        ${task.description ? `<div class="task-card-desc">${escapeHtml(task.description)}</div>` : ''}
+        <div class="task-card-footer">
+            <div class="task-card-meta">
+                <span class="priority-tag ${task.priority}">${getPriorityLabel(task.priority)}</span>
+                ${assigneeTags || '<span class="assignee-tag" style="color:var(--text-muted)">Chua ai nhan</span>'}
+                ${slotInfo} ${pointsTag}
+                ${task.due_date ? `<span class="due-date ${isOverdue ? 'overdue' : ''}">${formatDate(task.due_date)}</span>` : ''}
+            </div>
+            <div class="task-card-actions-row">${statusSelect} ${claimBtn}</div>
+        </div>
+    </div>`;
 }
 
 function renderList(tasks) {
     const tbody = document.getElementById('taskTableBody');
-
-    if (!tasks.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><p>Khong co task nao</p></td></tr>';
-        return;
-    }
-
+    if (!tasks.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><p>Khong co task nao</p></td></tr>'; return; }
     tbody.innerHTML = tasks.map(task => {
-        const isAdmin = currentUser.role === 'admin';
+        const isAdmin = currentUser.role === 'admin' || currentUser.role === 'bithu';
         const isClaimed = task.is_claimed_by_me;
         const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
         const canClaim = !isAdmin && !isClaimed && task.slots_left > 0 && task.status !== 'done';
-
-        let adminActions = '';
-        if (isAdmin) {
-            adminActions = `
-                <button class="btn-icon" onclick="openEditModal(${task.id})" title="Sua">&#9998;</button>
-                <button class="btn-icon" onclick="openDeleteModal(${task.id}, '${escapeHtml(task.title)}')" title="Xoa">&#10005;</button>
-            `;
-        }
-
+        let adminActions = isAdmin ? `<button class="btn-icon" onclick="openEditModal(${task.id})">&#9998;</button><button class="btn-icon" onclick="openDeleteModal(${task.id}, '${escapeHtml(task.title)}')">&#10005;</button>` : '';
         const assigneeNames = task.assigned_users.map(u => escapeHtml(u.username)).join(', ');
-
-        let statusCell = '';
-        if (isClaimed || isAdmin) {
-            statusCell = `
-                <select class="status-select" onchange="changeStatus(${task.id}, this.value)">
-                    <option value="pending" ${task.status === 'pending' ? 'selected' : ''}>Cho xu ly</option>
-                    <option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>Dang thuc hien</option>
-                    <option value="done" ${task.status === 'done' ? 'selected' : ''}>Hoan thanh</option>
-                </select>
-            `;
-        } else {
-            statusCell = `<span class="status-label">${getStatusLabel(task.status)}</span>`;
-        }
-
-        let claimBtn = '';
-        if (canClaim) {
-            claimBtn = `<button class="btn btn-claim btn-sm" onclick="claimTask(${task.id})">Nhan</button>`;
-        } else if (isClaimed && !isAdmin) {
-            claimBtn = `<button class="btn btn-unclaim btn-sm" onclick="unclaimTask(${task.id})">Bo nhan</button>`;
-        }
-
-        return `
-            <tr>
-                <td>
-                    <div class="task-title-cell">
-                        ${escapeHtml(task.title)}
-                        ${task.description ? `<small>${escapeHtml(task.description.substring(0, 60))}${task.description.length > 60 ? '...' : ''}</small>` : ''}
-                    </div>
-                </td>
-                <td>${statusCell}</td>
-                <td><span class="priority-tag ${task.priority}">${getPriorityLabel(task.priority)}</span></td>
-                <td>${assigneeNames || '<span style="color:var(--text-muted)">Chua ai nhan</span>'}</td>
-                <td><span class="slot-info">${task.assignee_count}/${task.max_assignees}</span></td>
-                <td>${task.due_date ? `<span class="due-date ${isOverdue ? 'overdue' : ''}">${formatDate(task.due_date)}</span>` : '-'}</td>
-                <td>${adminActions}${claimBtn}</td>
-            </tr>
-        `;
+        let statusCell = (isClaimed || isAdmin) ? `<select class="status-select" onchange="changeStatus(${task.id}, this.value)"><option value="pending" ${task.status === 'pending' ? 'selected' : ''}>Cho xu ly</option><option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>Dang thuc hien</option><option value="done" ${task.status === 'done' ? 'selected' : ''}>Hoan thanh</option></select>` : `<span class="status-label">${getStatusLabel(task.status)}</span>`;
+        let claimBtn = canClaim ? `<button class="btn btn-claim btn-sm" onclick="claimTask(${task.id})">Nhan</button>` : isClaimed && !isAdmin ? `<button class="btn btn-unclaim btn-sm" onclick="unclaimTask(${task.id})">Bo nhan</button>` : '';
+        return `<tr><td><div class="task-title-cell">${escapeHtml(task.title)}${task.description ? `<small>${escapeHtml(task.description.substring(0, 60))}${task.description.length > 60 ? '...' : ''}</small>` : ''}</div></td><td>${statusCell}</td><td><span class="priority-tag ${task.priority}">${getPriorityLabel(task.priority)}</span></td><td>${assigneeNames || '<span style="color:var(--text-muted)">Chua ai nhan</span>'}</td><td><span class="slot-info">${task.assignee_count}/${task.max_assignees}</span></td><td>${task.points > 0 ? `<span class="priority-tag low">+${task.points}</span>` : '-'}</td><td>${task.due_date ? `<span class="due-date ${isOverdue ? 'overdue' : ''}">${formatDate(task.due_date)}</span>` : '-'}</td><td>${adminActions}${claimBtn}</td></tr>`;
     }).join('');
 }
 
-// ==================== CLAIM / UNCLAIM ====================
+// ==================== POINTS ====================
+async function loadPoints() {
+    try {
+        const res = await fetch('/api/points');
+        allPoints = await res.json();
+        renderPoints();
+    } catch (err) { showToast('Loi tai diem', 'error'); }
+}
+
+function renderPoints() {
+    const tbody = document.getElementById('pointsTableBody');
+    if (!allPoints.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state"><p>Chua co du lieu</p></td></tr>'; return; }
+    tbody.innerHTML = allPoints.map((u, i) => `<tr><td>${i + 1}</td><td><strong>${escapeHtml(u.username)}</strong></td><td><span class="priority-tag low" style="font-size:14px;">${u.score} diem</span></td><td><button class="btn btn-sm btn-secondary" onclick="openPointsDetail(${u.id}, '${escapeHtml(u.username)}')">Xem chi tiet</button></td></tr>`).join('');
+}
+
+async function openPointsDetail(userId, username) {
+    try {
+        const res = await fetch(`/api/points/${userId}`);
+        const data = await res.json();
+        document.getElementById('pointsDetailTitle').textContent = `Diem - ${username}`;
+        document.getElementById('pointsDetailScore').textContent = data.user.score;
+        const tbody = document.getElementById('pointsDetailLogBody');
+        if (!data.logs.length) { tbody.innerHTML = '<tr><td colspan="3" class="empty-state"><p>Chua co lich su</p></td></tr>'; }
+        else { tbody.innerHTML = data.logs.map(l => `<tr><td>${formatDate(l.created_at)}</td><td><span class="priority-tag ${l.points >= 0 ? 'low' : 'high'}">${l.points >= 0 ? '+' : ''}${l.points}</span></td><td>${escapeHtml(l.reason)}</td></tr>`).join(''); }
+        document.getElementById('pointsDetailModal').classList.add('active');
+    } catch (err) { showToast('Loi tai du lieu', 'error'); }
+}
+
+function closePointsDetailModal() { document.getElementById('pointsDetailModal').classList.remove('active'); }
+
+function openAddPointsModal() {
+    document.getElementById('pointsUserId').innerHTML = allUsers.map(u => `<option value="${u.id}">${escapeHtml(u.username)}</option>`).join('');
+    document.getElementById('pointsValue').value = '';
+    document.getElementById('pointsReason').value = '';
+    document.getElementById('pointsError').textContent = '';
+    document.getElementById('addPointsModal').classList.add('active');
+}
+
+function closeAddPointsModal() { document.getElementById('addPointsModal').classList.remove('active'); }
+
+async function submitPoints() {
+    const userId = document.getElementById('pointsUserId').value;
+    const points = document.getElementById('pointsValue').value;
+    const reason = document.getElementById('pointsReason').value.trim();
+    const errorEl = document.getElementById('pointsError');
+    if (!userId || !points || !reason) { errorEl.textContent = 'Day du thong tin'; return; }
+    try {
+        const res = await fetch('/api/points', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: parseInt(userId), points: parseInt(points), reason }) });
+        const data = await res.json();
+        if (!res.ok) { errorEl.textContent = data.error; return; }
+        closeAddPointsModal();
+        await loadPoints();
+        showToast('Da cap nhat diem', 'success');
+    } catch (err) { errorEl.textContent = 'Loi ket noi'; }
+}
+
+async function loadMyPoints() {
+    try {
+        const res = await fetch(`/api/points/${currentUser.id}`);
+        const data = await res.json();
+        document.getElementById('myScore').textContent = data.user.score;
+        const tbody = document.getElementById('myPointsLogBody');
+        if (!data.logs.length) { tbody.innerHTML = '<tr><td colspan="3" class="empty-state"><p>Chua co diem</p></td></tr>'; }
+        else { tbody.innerHTML = data.logs.map(l => `<tr><td>${formatDate(l.created_at)}</td><td><span class="priority-tag ${l.points >= 0 ? 'low' : 'high'}">${l.points >= 0 ? '+' : ''}${l.points}</span></td><td>${escapeHtml(l.reason)}</td></tr>`).join(''); }
+    } catch (err) { showToast('Loi tai du lieu', 'error'); }
+}
+
+// ==================== FINANCE ====================
+async function loadFinance() {
+    try {
+        const [listRes, summaryRes] = await Promise.all([fetch('/api/finance'), fetch('/api/finance/summary')]);
+        const transactions = await listRes.json();
+        const summary = await summaryRes.json();
+        document.getElementById('financeIncome').textContent = formatMoney(summary.income);
+        document.getElementById('financeExpense').textContent = formatMoney(summary.expense);
+        document.getElementById('financeBalance').textContent = formatMoney(summary.balance);
+        const tbody = document.getElementById('financeTableBody');
+        if (!transactions.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><p>Chua co giao dich</p></td></tr>'; return; }
+        tbody.innerHTML = transactions.map(t => `<tr><td>${formatDate(t.date)}</td><td><span class="priority-tag ${t.type === 'income' ? 'low' : 'high'}">${t.type === 'income' ? 'Thu' : 'Chi'}</span></td><td><strong>${formatMoney(t.amount)}</strong></td><td>${escapeHtml(t.description) || '-'}</td><td>${escapeHtml(t.category) || '-'}</td><td><button class="btn-icon" onclick="deleteFinance(${t.id})">&#10005;</button></td></tr>`).join('');
+    } catch (err) { showToast('Loi tai du lieu', 'error'); }
+}
+
+function openAddFinanceModal() {
+    document.getElementById('financeType').value = 'income';
+    document.getElementById('financeAmount').value = '';
+    document.getElementById('financeDesc').value = '';
+    document.getElementById('financeCategory').value = '';
+    document.getElementById('financeError').textContent = '';
+    document.getElementById('addFinanceModal').classList.add('active');
+}
+
+function closeAddFinanceModal() { document.getElementById('addFinanceModal').classList.remove('active'); }
+
+async function submitFinance() {
+    const type = document.getElementById('financeType').value;
+    const amount = document.getElementById('financeAmount').value;
+    const description = document.getElementById('financeDesc').value.trim();
+    const category = document.getElementById('financeCategory').value.trim();
+    const errorEl = document.getElementById('financeError');
+    if (!amount) { errorEl.textContent = 'Nhap so tien'; return; }
+    try {
+        const res = await fetch('/api/finance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, amount: parseFloat(amount), description, category }) });
+        const data = await res.json();
+        if (!res.ok) { errorEl.textContent = data.error; return; }
+        closeAddFinanceModal();
+        await loadFinance();
+        showToast('Da them giao dich', 'success');
+    } catch (err) { errorEl.textContent = 'Loi ket noi'; }
+}
+
+async function deleteFinance(id) {
+    if (!confirm('Xoa giao dich nay?')) return;
+    try {
+        await fetch(`/api/finance/${id}`, { method: 'DELETE' });
+        await loadFinance();
+        showToast('Da xoa giao dich', 'success');
+    } catch (err) { showToast('Loi', 'error'); }
+}
+
+// ==================== CLAIM ====================
 async function claimTask(taskId) {
     try {
         const res = await fetch(`/api/tasks/${taskId}/claim`, { method: 'POST' });
         const data = await res.json();
-        if (!res.ok) {
-            showToast(data.error || 'Loi nhan task', 'error');
-            return;
-        }
+        if (!res.ok) { showToast(data.error, 'error'); return; }
         await loadTasks();
-        showToast('Da nhan task thanh cong', 'success');
-    } catch (err) {
-        showToast('Loi ket noi', 'error');
-    }
+        showToast('Da nhan task', 'success');
+    } catch (err) { showToast('Loi ket noi', 'error'); }
 }
 
 async function unclaimTask(taskId) {
     try {
-        const res = await fetch(`/api/tasks/${taskId}/claim`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id: currentUser.id })
-        });
+        const res = await fetch(`/api/tasks/${taskId}/claim`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUser.id }) });
         const data = await res.json();
-        if (!res.ok) {
-            showToast(data.error || 'Loi bo nhan task', 'error');
-            return;
-        }
+        if (!res.ok) { showToast(data.error, 'error'); return; }
         await loadTasks();
-        showToast('Da bo nhan task', 'success');
-    } catch (err) {
-        showToast('Loi ket noi', 'error');
-    }
+        showToast('Da bo nhan', 'success');
+    } catch (err) { showToast('Loi ket noi', 'error'); }
 }
 
-// ==================== STATUS CHANGE ====================
 async function changeStatus(taskId, newStatus) {
     try {
-        const res = await fetch(`/api/tasks/${taskId}/status`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: newStatus })
-        });
-        if (!res.ok) {
-            const data = await res.json();
-            showToast(data.error || 'Loi cap nhat', 'error');
-            return;
-        }
+        const res = await fetch(`/api/tasks/${taskId}/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: newStatus }) });
+        if (!res.ok) { const data = await res.json(); showToast(data.error, 'error'); return; }
         await loadTasks();
-        showToast('Da cap nhat trang thai', 'success');
-    } catch (err) {
-        showToast('Loi ket noi', 'error');
-    }
+        showToast('Da cap nhat', 'success');
+    } catch (err) { showToast('Loi ket noi', 'error'); }
 }
 
 // ==================== MODALS ====================
@@ -404,6 +403,7 @@ function openTaskModal(taskId = null) {
         document.getElementById('taskPriority').value = task.priority;
         document.getElementById('taskMaxAssignees').value = task.max_assignees;
         document.getElementById('taskDueDate').value = task.due_date || '';
+        document.getElementById('taskPoints').value = task.points || 0;
         setSelectedAssignees(task.assigned_users.map(u => u.id));
     } else {
         document.getElementById('modalTitle').textContent = 'Them nhiem vu moi';
@@ -411,104 +411,58 @@ function openTaskModal(taskId = null) {
         document.getElementById('taskId').value = '';
         document.getElementById('taskPriority').value = 'medium';
         document.getElementById('taskMaxAssignees').value = 3;
+        document.getElementById('taskPoints').value = 0;
         setSelectedAssignees([]);
     }
     document.getElementById('taskModal').classList.add('active');
 }
 
-function closeTaskModal() {
-    document.getElementById('taskModal').classList.remove('active');
-}
-
-function openEditModal(taskId) {
-    openTaskModal(taskId);
-}
-
-function openDeleteModal(taskId, taskTitle) {
-    deleteTaskId = taskId;
-    document.getElementById('deleteTaskName').textContent = taskTitle;
-    document.getElementById('deleteModal').classList.add('active');
-}
-
-function closeDeleteModal() {
-    document.getElementById('deleteModal').classList.remove('active');
-    deleteTaskId = null;
-}
+function closeTaskModal() { document.getElementById('taskModal').classList.remove('active'); }
+function openEditModal(taskId) { openTaskModal(taskId); }
+function openDeleteModal(taskId, title) { deleteTaskId = taskId; document.getElementById('deleteTaskName').textContent = title; document.getElementById('deleteModal').classList.add('active'); }
+function closeDeleteModal() { document.getElementById('deleteModal').classList.remove('active'); deleteTaskId = null; }
 
 async function saveTask() {
     const errorEl = document.getElementById('taskFormError');
     errorEl.textContent = '';
-
     const title = document.getElementById('taskTitle').value.trim();
-    if (!title) {
-        errorEl.textContent = 'Tieu de khong duoc de trong';
-        return;
-    }
-
+    if (!title) { errorEl.textContent = 'Tieu de khong duoc trong'; return; }
     const maxAssignees = parseInt(document.getElementById('taskMaxAssignees').value) || 3;
     const assignedTo = getSelectedAssignees();
-    if (assignedTo.length > maxAssignees) {
-        errorEl.textContent = `Toi da giao cho ${maxAssignees} nguoi`;
-        return;
-    }
-
+    if (assignedTo.length > maxAssignees) { errorEl.textContent = `Toi da giao cho ${maxAssignees} nguoi`; return; }
     const taskId = document.getElementById('taskId').value;
     const payload = {
-        title,
-        description: document.getElementById('taskDesc').value.trim(),
-        status: document.getElementById('taskStatus').value,
-        priority: document.getElementById('taskPriority').value,
-        max_assignees: maxAssignees,
-        assigned_to: assignedTo,
-        due_date: document.getElementById('taskDueDate').value || null
+        title, description: document.getElementById('taskDesc').value.trim(),
+        status: document.getElementById('taskStatus').value, priority: document.getElementById('taskPriority').value,
+        max_assignees: maxAssignees, assigned_to: assignedTo,
+        due_date: document.getElementById('taskDueDate').value || null,
+        points: parseInt(document.getElementById('taskPoints').value) || 0
     };
-
     try {
         const url = taskId ? `/api/tasks/${taskId}` : '/api/tasks';
         const method = taskId ? 'PUT' : 'POST';
-        const res = await fetch(url, {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
+        const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         const data = await res.json();
-
-        if (!res.ok) {
-            errorEl.textContent = data.error || 'Loi luu task';
-            return;
-        }
-
+        if (!res.ok) { errorEl.textContent = data.error; return; }
         closeTaskModal();
         await loadTasks();
-        showToast(taskId ? 'Da cap nhat task' : 'Da tao task moi', 'success');
-    } catch (err) {
-        errorEl.textContent = 'Loi ket noi server';
-    }
+        showToast(taskId ? 'Da cap nhat task' : 'Da tao task', 'success');
+    } catch (err) { errorEl.textContent = 'Loi ket noi'; }
 }
 
 async function confirmDelete() {
     if (!deleteTaskId) return;
-
     try {
         const res = await fetch(`/api/tasks/${deleteTaskId}`, { method: 'DELETE' });
-        if (!res.ok) {
-            showToast('Loi xoa task', 'error');
-            return;
-        }
+        if (!res.ok) { showToast('Loi xoa', 'error'); return; }
         closeDeleteModal();
         await loadTasks();
         showToast('Da xoa task', 'success');
-    } catch (err) {
-        showToast('Loi ket noi', 'error');
-    }
+    } catch (err) { showToast('Loi ket noi', 'error'); }
 }
 
 // ==================== UTILS ====================
-function logout() {
-    fetch('/api/logout').then(() => {
-        window.location.href = '/login';
-    });
-}
+function logout() { fetch('/api/logout').then(() => window.location.href = '/login'); }
 
 function showToast(message, type = 'info') {
     const toast = document.getElementById('toast');
@@ -524,26 +478,9 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-function getPriorityLabel(priority) {
-    const labels = { low: 'Thap', medium: 'TB', high: 'Cao' };
-    return labels[priority] || priority;
-}
+function getPriorityLabel(p) { return { low: 'Thap', medium: 'TB', high: 'Cao' }[p] || p; }
+function getStatusLabel(s) { return { pending: 'Cho xu ly', in_progress: 'Dang thuc hien', done: 'Hoan thanh' }[s] || s; }
+function formatDate(d) { return d ? new Date(d).toLocaleDateString('vi-VN') : ''; }
+function formatMoney(n) { return new Intl.NumberFormat('vi-VN').format(n) + ' VND'; }
 
-function getStatusLabel(status) {
-    const labels = { pending: 'Cho xu ly', in_progress: 'Dang thuc hien', done: 'Hoan thanh' };
-    return labels[status] || status;
-}
-
-function formatDate(dateStr) {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('vi-VN');
-}
-
-// Close modals on Escape
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        closeTaskModal();
-        closeDeleteModal();
-    }
-});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeTaskModal(); closeDeleteModal(); closeAddPointsModal(); closeAddFinanceModal(); closePointsDetailModal(); } });
