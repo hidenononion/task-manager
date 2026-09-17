@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Đăng ký - Task Manager{% endblock %}
+{% block body %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <div class="logo">TM</div>
+            <h1>Task Manager</h1>
+            <p>Tạo tài khoản mới</p>
+        </div>
+        <form id="registerForm" class="auth-form">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" placeholder="Nhập username" required minlength="3">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="Nhập password (ít nhất 4 ký tự)" required minlength="4">
+            </div>
+            <div class="form-group">
+                <label for="confirmPassword">Xác nhận password</label>
+                <input type="password" id="confirmPassword" placeholder="Nhập lại password" required>
+            </div>
+            <div id="registerError" class="error-msg"></div>
+            <button type="submit" class="btn btn-primary btn-full">Đăng ký</button>
+        </form>
+        <div class="auth-footer">
+            Đã có tài khoản? <a href="/login">Đăng nhập</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+{% endblock %}

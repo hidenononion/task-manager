@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Task Manager{% endblock %}
+{% block body %}
+<div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">TM</div>
+            <span class="app-name">Task Manager</span>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="#" class="nav-item active" data-view="kanban">
+                <span class="nav-icon">&#9638;</span> Kanban Board
+            </a>
+            <a href="#" class="nav-item" data-view="list">
+                <span class="nav-icon">&#9776;</span> Danh sách
+            </a>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar" id="userAvatar">A</div>
+                <div class="user-details">
+                    <span id="userName">User</span>
+                    <span id="userRole" class="badge">user</span>
+                </div>
+            </div>
+            <button class="btn btn-logout" onclick="logout()">Đăng xuất</button>
+        </div>
+    </aside>
+
+    <!-- Sidebar overlay for mobile -->
+    <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Header -->
+        <header class="content-header">
+            <div class="header-left">
+                <button class="hamburger" id="hamburger" onclick="toggleSidebar()">&#9776;</button>
+                <h2 id="viewTitle">Kanban Board</h2>
+                <span class="task-count" id="taskCount">0 nhiệm vụ</span>
+            </div>
+            <div class="header-right">
+                <div class="filters">
+                    <select id="filterPriority" class="filter-select">
+                        <option value="">Tất cả ưu tiên</option>
+                        <option value="low">Thấp</option>
+                        <option value="medium">Trung bình</option>
+                        <option value="high">Cao</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" id="addTaskBtn" onclick="openTaskModal()">+ Thêm nhiệm vụ</button>
+            </div>
+        </header>
+
+        <!-- Kanban View -->
+        <div id="kanbanView" class="kanban-board">
+            <div class="kanban-column" data-status="pending">
+                <div class="column-header">
+                    <span class="column-dot pending"></span>
+                    <h3>Chờ xử lý</h3>
+                    <span class="column-count" id="pendingCount">0</span>
+                </div>
+                <div class="column-body" id="pendingTasks"></div>
+            </div>
+            <div class="kanban-column" data-status="in_progress">
+                <div class="column-header">
+                    <span class="column-dot in_progress"></span>
+                    <h3>Đang thực hiện</h3>
+                    <span class="column-count" id="inProgressCount">0</span>
+                </div>
+                <div class="column-body" id="inProgressTasks"></div>
+            </div>
+            <div class="kanban-column" data-status="done">
+                <div class="column-header">
+                    <span class="column-dot done"></span>
+                    <h3>Hoàn thành</h3>
+                    <span class="column-count" id="doneCount">0</span>
+                </div>
+                <div class="column-body" id="doneTasks"></div>
+            </div>
+        </div>
+
+        <!-- List View -->
+        <div id="listView" class="list-view" style="display:none;">
+            <table class="task-table">
+                <thead>
+                    <tr>
+                        <th>Nhiệm vụ</th>
+                        <th>Trạng thái</th>
+                        <th>Ưu tiên</th>
+                        <th>Người thực hiện</th>
+                        <th>Slot</th>
+                        <th>Hạn chót</th>
+                        <th>Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="taskTableBody"></tbody>
+            </table>
+        </div>
+    </main>
+</div>
+
+<!-- Task Modal -->
+<div id="taskModal" class="modal">
+    <div class="modal-overlay" onclick="closeTaskModal()"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="modalTitle">Thêm nhiệm vụ mới</h3>
+            <button class="modal-close" onclick="closeTaskModal()">&times;</button>
+        </div>
+        <form id="taskForm" class="modal-body">
+            <input type="hidden" id="taskId">
+            <div class="form-group">
+                <label for="taskTitle">Tiêu đề *</label>
+                <input type="text" id="taskTitle" placeholder="Nhập tiêu đề nhiệm vụ" required>
+            </div>
+            <div class="form-group">
+                <label for="taskDesc">Mô tả</label>
+                <textarea id="taskDesc" rows="3" placeholder="Mô tả chi tiết..."></textarea>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="taskStatus">Trạng thái</label>
+                    <select id="taskStatus">
+                        <option value="pending">Chờ xử lý</option>
+                        <option value="in_progress">Đang thực hiện</option>
+                        <option value="done">Hoàn thành</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="taskPriority">Ưu tiên</label>
+                    <select id="taskPriority">
+                        <option value="low">Thấp</option>
+                        <option value="medium" selected>Trung bình</option>
+                        <option value="high">Cao</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Giao cho (tối đa 3 người)</label>
+                <div id="taskAssignees" class="checkbox-group"></div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="taskMaxAssignees">Số người tối đa nhận task</label>
+                    <input type="number" id="taskMaxAssignees" min="1" max="10" value="3">
+                </div>
+                <div class="form-group">
+                    <label for="taskDueDate">Hạn chót</label>
+                    <input type="date" id="taskDueDate">
+                </div>
+            </div>
+            <div id="taskFormError" class="error-msg"></div>
+        </form>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeTaskModal()">Hủy</button>
+            <button class="btn btn-primary" onclick="saveTask()">Lưu</button>
+        </div>
+    </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div id="deleteModal" class="modal">
+    <div class="modal-overlay" onclick="closeDeleteModal()"></div>
+    <div class="modal-content modal-small">
+        <div class="modal-header">
+            <h3>Xác nhận xóa</h3>
+            <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p>Bạn có chắc muốn xóa nhiệm vụ này?</p>
+            <p id="deleteTaskName" class="delete-task-name"></p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeDeleteModal()">Hủy</button>
+            <button class="btn btn-danger" onclick="confirmDelete()">Xóa</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Notification -->
+<div id="toast" class="toast"></div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% endblock %}
