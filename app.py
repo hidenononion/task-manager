@@ -140,7 +140,7 @@ def init_db():
                 created_by INTEGER,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id),
-                FOREIGN KEY (task_id) REFERENCES tasks(id),
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
                 FOREIGN KEY (created_by) REFERENCES users(id)
             );
             CREATE TABLE IF NOT EXISTS finance (
@@ -480,6 +480,7 @@ def api_delete_task(task_id):
     if not task:
         conn.close()
         return jsonify({'error': 'Task không tồn tại'}), 404
+    cur.execute(q("DELETE FROM points_log WHERE task_id = %s", "DELETE FROM points_log WHERE task_id = ?"), (task_id,))
     cur.execute(q("DELETE FROM task_assignments WHERE task_id = %s", "DELETE FROM task_assignments WHERE task_id = ?"), (task_id,))
     cur.execute(q("DELETE FROM tasks WHERE id = %s", "DELETE FROM tasks WHERE id = ?"), (task_id,))
     conn.commit()
