@@ -532,6 +532,11 @@ def api_claim_task(task_id):
 
     cur.execute(q("INSERT INTO task_assignments (task_id, user_id) VALUES (%s, %s)",
                   "INSERT INTO task_assignments (task_id, user_id) VALUES (?, ?)"), (task_id, session['user_id']))
+
+    if task['status'] == 'pending':
+        cur.execute(q("UPDATE tasks SET status = 'in_progress' WHERE id = %s",
+                      "UPDATE tasks SET status = 'in_progress' WHERE id = ?"), (task_id,))
+
     conn.commit()
     updated = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
     result = serialize_task(conn, updated, session['user_id'])
