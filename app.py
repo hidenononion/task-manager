@@ -377,20 +377,7 @@ def api_tasks():
     if role in ('admin', 'bithu'):
         tasks = cur.execute("SELECT * FROM tasks ORDER BY created_at DESC").fetchall()
     else:
-        if is_pg():
-            assigned = cur.execute("SELECT task_id FROM task_assignments WHERE user_id = %s", (user_id,)).fetchall()
-        else:
-            assigned = cur.execute("SELECT task_id FROM task_assignments WHERE user_id = ?", (user_id,)).fetchall()
-        task_ids = [a['task_id'] for a in assigned]
-        if task_ids:
-            if is_pg():
-                placeholders = ','.join(['%s'] * len(task_ids))
-                tasks = cur.execute(f"SELECT * FROM tasks WHERE id IN ({placeholders}) ORDER BY created_at DESC", task_ids).fetchall()
-            else:
-                placeholders = ','.join('?' * len(task_ids))
-                tasks = cur.execute(f"SELECT * FROM tasks WHERE id IN ({placeholders}) ORDER BY created_at DESC", task_ids).fetchall()
-        else:
-            tasks = []
+        tasks = cur.execute("SELECT * FROM tasks ORDER BY created_at DESC").fetchall()
 
     result = [serialize_task(conn, t, user_id, role) for t in tasks]
     conn.close()
