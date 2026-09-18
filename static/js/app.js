@@ -78,9 +78,9 @@ function setupNav() {
 
             if (currentView === 'kanban') document.getElementById('kanbanView').style.display = 'flex';
             else if (currentView === 'list') { document.getElementById('listView').style.display = 'block'; renderTasks(); }
-            else if (currentView === 'points') loadPoints();
-            else if (currentView === 'my-points') loadMyPoints();
-            else if (currentView === 'finance') loadFinance();
+            else if (currentView === 'points') { document.getElementById('pointsView').style.display = 'block'; loadPoints(); }
+            else if (currentView === 'my-points') { document.getElementById('myPointsView').style.display = 'block'; loadMyPoints(); }
+            else if (currentView === 'finance') { document.getElementById('financeView').style.display = 'block'; loadFinance(); }
         });
     });
 }
