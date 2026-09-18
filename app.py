@@ -384,7 +384,8 @@ def api_tasks():
         task_ids = [a['task_id'] for a in assigned]
         if task_ids:
             if is_pg():
-                tasks = cur.execute(q(f"SELECT * FROM tasks WHERE id IN ({','.join(['%s']*len(task_ids))}) ORDER BY created_at DESC", ""), task_ids).fetchall()
+                placeholders = ','.join(['%s'] * len(task_ids))
+                tasks = cur.execute(f"SELECT * FROM tasks WHERE id IN ({placeholders}) ORDER BY created_at DESC", task_ids).fetchall()
             else:
                 placeholders = ','.join('?' * len(task_ids))
                 tasks = cur.execute(f"SELECT * FROM tasks WHERE id IN ({placeholders}) ORDER BY created_at DESC", task_ids).fetchall()
