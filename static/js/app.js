@@ -77,7 +77,7 @@ function setupNav() {
             document.getElementById('statsGrid').style.display = ['kanban', 'list'].includes(currentView) ? '' : 'none';
 
             if (currentView === 'kanban') document.getElementById('kanbanView').style.display = 'flex';
-            else if (currentView === 'list') document.getElementById('listView').style.display = 'block';
+            else if (currentView === 'list') { document.getElementById('listView').style.display = 'block'; renderTasks(); }
             else if (currentView === 'points') loadPoints();
             else if (currentView === 'my-points') loadMyPoints();
             else if (currentView === 'finance') loadFinance();
