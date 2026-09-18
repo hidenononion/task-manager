@@ -21,10 +21,9 @@ LOCAL_DB = os.path.join(os.path.dirname(__file__), 'database.db')
 
 def get_db():
     if DATABASE_URL:
-        import psycopg2
-        import psycopg2.extras
-        conn = psycopg2.connect(DATABASE_URL)
-        conn.row_factory = psycopg2.extras.RealDictCursor
+        import psycopg
+        conn = psycopg.connect(DATABASE_URL, row_factory=psycopg.rows.dict_row)
+        conn.autocommit = False
         return conn
     else:
         import sqlite3
