@@ -821,6 +821,11 @@ def api_finance_create():
         cur.execute(q("UPDATE fund SET balance = balance - %s, updated_at = NOW() WHERE id = %s",
                       "UPDATE fund SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"),
                     (amount, fund['id']))
+    elif trans_type == 'income':
+        fund = get_fund(conn)
+        cur.execute(q("UPDATE fund SET balance = balance + %s, updated_at = NOW() WHERE id = %s",
+                      "UPDATE fund SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"),
+                    (amount, fund['id']))
 
     cur.execute(q("INSERT INTO finance (type, amount, description, category, created_by) VALUES (%s, %s, %s, %s, %s)",
                   "INSERT INTO finance (type, amount, description, category, created_by) VALUES (?, ?, ?, ?, ?)"),
