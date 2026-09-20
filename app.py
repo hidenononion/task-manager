@@ -321,7 +321,10 @@ def api_me():
 def api_users():
     conn = get_db()
     cur = conn.cursor()
-    if session.get('role') in ('admin', 'bithu'):
+    if session.get('role') == 'admin':
+        users = cur.execute(q("SELECT id, username, role, score FROM users ORDER BY username",
+                              "SELECT id, username, role, score FROM users ORDER BY username")).fetchall()
+    elif session.get('role') == 'bithu':
         users = cur.execute(q("SELECT id, username, role, score FROM users WHERE role = 'user' ORDER BY username",
                               "SELECT id, username, role, score FROM users WHERE role = 'user' ORDER BY username")).fetchall()
     else:
@@ -338,8 +341,10 @@ def api_users():
 def api_update_role(user_id):
     data = request.get_json()
     new_role = data.get('role')
-    if new_role not in ('user', 'bithu'):
+    if new_role not in ('user', 'bithu', 'admin'):
         return jsonify({'error': 'Role không hợp lệ'}), 400
+    if new_role == 'admin' and session.get('role') != 'admin':
+        return jsonify({'error': 'Chỉ admin mới có thể cấp quyền admin'}), 403
     conn = get_db()
     cur = conn.cursor()
     cur.execute(q("UPDATE users SET role = %s WHERE id = %s", "UPDATE users SET role = ? WHERE id = ?"), (new_role, user_id))

@@ -69,10 +69,10 @@ function setupNav() {
             item.classList.add('active');
             currentView = item.dataset.view;
 
-            const views = ['kanbanView', 'listView', 'pointsView', 'myPointsView', 'financeView'];
+            const views = ['kanbanView', 'listView', 'pointsView', 'myPointsView', 'financeView', 'usersView'];
             views.forEach(v => { const el = document.getElementById(v); if (el) el.style.display = 'none'; });
 
-            const titles = { kanban: 'Kanban Board', list: 'Danh sách', points: 'Điểm tổng hợp', 'my-points': 'Điểm của tôi', finance: 'Tài chính' };
+            const titles = { kanban: 'Kanban Board', list: 'Danh sách', points: 'Điểm tổng hợp', 'my-points': 'Điểm của tôi', finance: 'Tài chính', users: 'Quản lý user' };
             document.getElementById('viewTitle').textContent = titles[currentView] || '';
             document.getElementById('statsGrid').style.display = ['kanban', 'list'].includes(currentView) ? '' : 'none';
 
@@ -81,6 +81,7 @@ function setupNav() {
             else if (currentView === 'points') { document.getElementById('pointsView').style.display = 'block'; loadPoints(); }
             else if (currentView === 'my-points') { document.getElementById('myPointsView').style.display = 'block'; loadMyPoints(); }
             else if (currentView === 'finance') { document.getElementById('financeView').style.display = 'block'; loadFinance(); }
+            else if (currentView === 'users') { document.getElementById('usersView').style.display = 'block'; loadUsersList(); }
         });
     });
 }
@@ -458,6 +459,40 @@ async function confirmDelete() {
         closeDeleteModal();
         await loadTasks();
         showToast('Đã xóa task', 'success');
+    } catch (err) { showToast('Lỗi kết nối', 'error'); }
+}
+
+// ==================== USERS MANAGEMENT ====================
+async function loadUsersList() {
+    try {
+        const res = await fetch('/api/users');
+        const users = await res.json();
+        const tbody = document.getElementById('usersTableBody');
+        if (!users.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state"><p>Chưa có user</p></td></tr>'; return; }
+        tbody.innerHTML = users.map(u => {
+            const roleOptions = ['user', 'bithu', 'admin'].map(r =>
+                `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r === 'admin' ? 'Admin' : r === 'bithu' ? 'Bí thư' : 'Đoàn viên'}</option>`
+            ).join('');
+            return `<tr>
+                <td><strong>${escapeHtml(u.username)}</strong></td>
+                <td><select class="status-select" onchange="updateUserRole(${u.id}, this.value)">${roleOptions}</select></td>
+                <td>${u.score || 0}</td>
+                <td></td>
+            </tr>`;
+        }).join('');
+    } catch (err) { showToast('Lỗi tải danh sách user', 'error'); }
+}
+
+async function updateUserRole(userId, newRole) {
+    try {
+        const res = await fetch(`/api/users/${userId}/role`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role: newRole })
+        });
+        const data = await res.json();
+        if (!res.ok) { showToast(data.error || 'Lỗi cập nhật', 'error'); loadUsersList(); return; }
+        showToast('Đã cập nhật role', 'success');
     } catch (err) { showToast('Lỗi kết nối', 'error'); }
 }
 

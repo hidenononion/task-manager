@@ -20,6 +20,9 @@
             <a href="#" class="nav-item admin-only" data-view="finance" style="display:none;">
                 <span class="nav-icon">&#128176;</span> Tài chính
             </a>
+            <a href="#" class="nav-item admin-only" data-view="users" style="display:none;">
+                <span class="nav-icon">&#128101;</span> Quản lý user
+            </a>
             <a href="#" class="nav-item" data-view="my-points">
                 <span class="nav-icon">&#11088;</span> Điểm của tôi
             </a>
@@ -208,6 +211,21 @@
                     </tr>
                 </thead>
                 <tbody id="financeTableBody"></tbody>
+            </table>
+        </div>
+
+        <div id="usersView" class="list-view" style="display:none;">
+            <h3 style="margin: 20px 0 12px;">Quản lý người dùng</h3>
+            <table class="task-table">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Role</th>
+                        <th>Điểm</th>
+                        <th>Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTableBody"></tbody>
             </table>
         </div>
     </main>
