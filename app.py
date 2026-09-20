@@ -214,6 +214,10 @@ def q(sql_pg, sql_lite):
 
 # ==================== PAGE ROUTES ====================
 
+@app.route('/health')
+def health():
+    return {'status': 'ok'}, 200
+
 @app.route('/')
 def index():
     if 'user_id' in session:
