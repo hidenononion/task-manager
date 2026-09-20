@@ -164,9 +164,9 @@ def init_db():
     admin = cur.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()
     if not admin:
         pw = hashlib.sha256('admin123'.encode()).hexdigest()
-        cur.execute("INSERT INTO users (username, password, role) VALUES (%s, %s, %s)" if is_pg() else
-                     "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-                     ('admin', pw, 'admin'))
+        cur.execute(q("INSERT INTO users (username, password, role) VALUES (%s, %s, %s)",
+                      "INSERT INTO users (username, password, role) VALUES (?, ?, ?)"),
+                     ('admin', pw, 'bithu'))
 
     if not is_pg():
         try:
@@ -200,7 +200,7 @@ def login_required(f):
 def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if session.get('role') not in ('admin', 'bithu'):
+        if session.get('role') != 'bithu':
             if request.path.startswith('/api/'):
                 return jsonify({'error': 'Admin access required'}), 403
             return redirect(url_for('dashboard'))
@@ -321,12 +321,9 @@ def api_me():
 def api_users():
     conn = get_db()
     cur = conn.cursor()
-    if session.get('role') == 'admin':
+    if session.get('role') == 'bithu':
         users = cur.execute(q("SELECT id, username, role, score FROM users ORDER BY username",
                               "SELECT id, username, role, score FROM users ORDER BY username")).fetchall()
-    elif session.get('role') == 'bithu':
-        users = cur.execute(q("SELECT id, username, role, score FROM users WHERE role = 'user' ORDER BY username",
-                              "SELECT id, username, role, score FROM users WHERE role = 'user' ORDER BY username")).fetchall()
     else:
         users = cur.execute(q("SELECT id, username, role, score FROM users WHERE id = %s",
                               "SELECT id, username, role, score FROM users WHERE id = ?"),
@@ -341,10 +338,8 @@ def api_users():
 def api_update_role(user_id):
     data = request.get_json()
     new_role = data.get('role')
-    if new_role not in ('user', 'bithu', 'admin'):
+    if new_role not in ('user', 'bithu'):
         return jsonify({'error': 'Role không hợp lệ'}), 400
-    if new_role == 'admin' and session.get('role') != 'admin':
-        return jsonify({'error': 'Chỉ admin mới có thể cấp quyền admin'}), 403
     conn = get_db()
     cur = conn.cursor()
     cur.execute(q("UPDATE users SET role = %s WHERE id = %s", "UPDATE users SET role = ? WHERE id = ?"), (new_role, user_id))
@@ -383,7 +378,7 @@ def api_tasks():
     role = session.get('role')
     user_id = session['user_id']
 
-    if role in ('admin', 'bithu'):
+    if role in 'bithu':
         tasks = cur.execute("SELECT * FROM tasks ORDER BY created_at DESC").fetchall()
     else:
         tasks = cur.execute("SELECT * FROM tasks ORDER BY created_at DESC").fetchall()
@@ -552,7 +547,7 @@ def api_unclaim_task(task_id):
         conn.close()
         return jsonify({'error': 'Task không tồn tại'}), 404
 
-    if session['role'] not in ('admin', 'bithu'):
+    if session['role'] not in 'bithu':
         own = cur.execute(q("SELECT 1 FROM task_assignments WHERE task_id = %s AND user_id = %s",
                             "SELECT 1 FROM task_assignments WHERE task_id = ? AND user_id = ?"),
                           (task_id, session['user_id'])).fetchone()
@@ -561,7 +556,7 @@ def api_unclaim_task(task_id):
             return jsonify({'error': 'Bạn chưa nhận task này'}), 400
 
     target_user = session['user_id']
-    if session['role'] in ('admin', 'bithu') and request.is_json:
+    if session['role'] in 'bithu' and request.is_json:
         target_user = request.get_json().get('user_id', session['user_id'])
 
     cur.execute(q("DELETE FROM task_assignments WHERE task_id = %s AND user_id = %s",
@@ -590,7 +585,7 @@ def api_update_status(task_id):
         conn.close()
         return jsonify({'error': 'Task không tồn tại'}), 404
 
-    if session['role'] not in ('admin', 'bithu'):
+    if session['role'] not in 'bithu':
         assigned = cur.execute(q("SELECT 1 FROM task_assignments WHERE task_id = %s AND user_id = %s",
                                 "SELECT 1 FROM task_assignments WHERE task_id = ? AND user_id = ?"),
                               (task_id, session['user_id'])).fetchone()
@@ -651,7 +646,7 @@ def api_points_list():
 @app.route('/api/points/<int:user_id>')
 @login_required
 def api_points_detail(user_id):
-    if session['role'] not in ('admin', 'bithu') and session['user_id'] != user_id:
+    if session['role'] not in 'bithu' and session['user_id'] != user_id:
         return jsonify({'error': 'Không có quyền'}), 403
     conn = get_db()
     cur = conn.cursor()

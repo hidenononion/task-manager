@@ -22,10 +22,10 @@ async function loadUser() {
         document.getElementById('userName').textContent = currentUser.username;
         document.getElementById('userAvatar').textContent = currentUser.username[0].toUpperCase();
         const roleEl = document.getElementById('userRole');
-        roleEl.textContent = currentUser.role === 'bithu' ? 'Bí thư' : currentUser.role;
-        if (currentUser.role === 'admin') roleEl.classList.add('badge-admin');
+        roleEl.textContent = currentUser.role === 'bithu' ? 'Bí thư' : 'Đoàn viên';
+        if (currentUser.role === 'bithu') roleEl.classList.add('badge-admin');
 
-        const isAdminOrBithu = currentUser.role === 'admin' || currentUser.role === 'bithu';
+        const isAdminOrBithu = currentUser.role === 'bithu';
         document.querySelectorAll('.admin-only').forEach(el => el.style.display = isAdminOrBithu ? '' : 'none');
         document.querySelectorAll('.user-only').forEach(el => el.style.display = !isAdminOrBithu ? '' : 'none');
         if (document.getElementById('addTaskBtn')) {
@@ -180,7 +180,7 @@ function renderKanban(tasks) {
 }
 
 function createTaskCard(task) {
-    const isAdmin = currentUser.role === 'admin' || currentUser.role === 'bithu';
+    const isAdmin = currentUser.role === 'bithu';
     const isClaimed = task.is_claimed_by_me;
     const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
     const canClaim = !isAdmin && !isClaimed && task.slots_left > 0 && task.status !== 'done';
@@ -229,7 +229,7 @@ function renderList(tasks) {
     const tbody = document.getElementById('taskTableBody');
     if (!tasks.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><p>Không có task nào</p></td></tr>'; return; }
     tbody.innerHTML = tasks.map(task => {
-        const isAdmin = currentUser.role === 'admin' || currentUser.role === 'bithu';
+        const isAdmin = currentUser.role === 'bithu';
         const isClaimed = task.is_claimed_by_me;
         const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
         const canClaim = !isAdmin && !isClaimed && task.slots_left > 0 && task.status !== 'done';
@@ -470,8 +470,8 @@ async function loadUsersList() {
         const tbody = document.getElementById('usersTableBody');
         if (!users.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state"><p>Chưa có user</p></td></tr>'; return; }
         tbody.innerHTML = users.map(u => {
-            const roleOptions = ['user', 'bithu', 'admin'].map(r =>
-                `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r === 'admin' ? 'Admin' : r === 'bithu' ? 'Bí thư' : 'Đoàn viên'}</option>`
+            const roleOptions = ['user', 'bithu'].map(r =>
+                `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r === 'bithu' ? 'Bí thư' : 'Đoàn viên'}</option>`
             ).join('');
             return `<tr>
                 <td><strong>${escapeHtml(u.username)}</strong></td>
