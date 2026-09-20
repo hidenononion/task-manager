@@ -614,6 +614,14 @@ def api_update_status(task_id):
                               "INSERT INTO points_log (user_id, points, reason, task_id, created_by) VALUES (?, ?, ?, ?, ?)"),
                             (uid, earned, f"Hoàn thành task: {task['title']} (chia đều từ {total_points} điểm cho {num_assignees} người)", task_id, session['user_id']))
 
+        fund = get_fund(conn)
+        cur.execute(q("UPDATE fund SET balance = balance + %s, updated_at = NOW() WHERE id = %s",
+                      "UPDATE fund SET balance = balance + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"),
+                    (task['points'], fund['id']))
+        cur.execute(q("INSERT INTO finance (type, amount, description, category, created_by) VALUES (%s, %s, %s, %s, %s)",
+                      "INSERT INTO finance (type, amount, description, category, created_by) VALUES (?, ?, ?, ?, ?)"),
+                    ('income', task['points'], f"Thu từ task: {task['title']}", 'Task', session['user_id']))
+
     conn.commit()
     updated = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
     result = serialize_task(conn, updated, session['user_id'])
