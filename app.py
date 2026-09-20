@@ -167,6 +167,9 @@ def init_db():
         cur.execute(q("INSERT INTO users (username, password, role) VALUES (%s, %s, %s)",
                       "INSERT INTO users (username, password, role) VALUES (?, ?, ?)"),
                      ('admin', pw, 'bithu'))
+    else:
+        cur.execute(q("UPDATE users SET role = 'bithu' WHERE username = 'admin' AND role != 'bithu'",
+                      "UPDATE users SET role = 'bithu' WHERE username = 'admin' AND role != 'bithu'"))
 
     if not is_pg():
         try:
