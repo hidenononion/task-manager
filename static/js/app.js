@@ -487,13 +487,29 @@ async function loadUsersList() {
                 `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r === 'bithu' ? 'Bí thư' : 'Đoàn viên'}</option>`
             ).join('');
             return `<tr>
-                <td><strong>${escapeHtml(u.username)}</strong></td>
+                <td><strong>${escapeHtml(u.username)}</strong>${u.full_name ? `<br><small style="color:var(--text-muted)">${escapeHtml(u.full_name)}</small>` : ''}</td>
+                <td><div style="display:flex;gap:4px;"><input type="text" value="${escapeHtml(u.title || '')}" id="title-${u.id}" placeholder="Chức danh" style="width:120px;"><button class="btn btn-sm btn-secondary" onclick="updateUserTitle(${u.id})">Lưu</button></div></td>
                 <td><select class="status-select" onchange="updateUserRole(${u.id}, this.value)">${roleOptions}</select></td>
                 <td>${u.score || 0}</td>
                 <td></td>
             </tr>`;
         }).join('');
     } catch (err) { showToast('Lỗi tải danh sách user', 'error'); }
+}
+
+async function updateUserTitle(userId) {
+    const el = document.getElementById('title-' + userId);
+    const title = el ? el.value : '';
+    try {
+        const res = await fetch(`/api/users/${userId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title })
+        });
+        const data = await res.json();
+        if (!res.ok) { showToast(data.error || 'Lỗi cập nhật', 'error'); return; }
+        showToast('Đã cập nhật chức danh', 'success');
+    } catch (err) { showToast('Lỗi kết nối', 'error'); }
 }
 
 async function updateUserRole(userId, newRole) {
@@ -596,9 +612,10 @@ function switchSettingsTab(tab) {
 function fillSettings() {
     if (!currentUser) return;
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
-    set('setFullName', currentUser.full_name); set('setTitle', currentUser.title);
+    set('setFullName', currentUser.full_name);
     set('setDept', currentUser.department); set('setPhone', currentUser.phone);
     set('setEmail', currentUser.email); set('setAvatar', currentUser.avatar);
+    set('setTitleRO', currentUser.title);
     set('setTheme', currentUser.theme || localStorage.getItem('theme') || 'dark');
     set('setDefaultView', currentUser.default_view || 'kanban');
     set('setLang', currentUser.language || 'vi'); set('setTz', currentUser.timezone || 'Asia/Ho_Chi_Minh');
@@ -629,7 +646,6 @@ async function loadSettings() {
 async function saveProfile() {
     const body = {
         full_name: document.getElementById('setFullName').value,
-        title: document.getElementById('setTitle').value,
         department: document.getElementById('setDept').value,
         phone: document.getElementById('setPhone').value,
         email: document.getElementById('setEmail').value,

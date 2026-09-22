@@ -490,8 +490,8 @@ def api_users():
     conn = get_db()
     cur = conn.cursor()
     if session.get('role') == 'bithu':
-        users = cur.execute(q("SELECT id, username, role, score FROM users ORDER BY username",
-                              "SELECT id, username, role, score FROM users ORDER BY username")).fetchall()
+        users = cur.execute(q("SELECT id, username, role, score, full_name, title FROM users ORDER BY username",
+                              "SELECT id, username, role, score, full_name, title FROM users ORDER BY username")).fetchall()
     else:
         users = cur.execute(q("SELECT id, username, role, score FROM users WHERE id = %s",
                               "SELECT id, username, role, score FROM users WHERE id = ?"),
@@ -516,9 +516,29 @@ def api_update_role(user_id):
     return jsonify({'message': 'Đã cập nhật role'})
 
 
+@app.route('/api/users/<int:user_id>', methods=['PUT'])
+@login_required
+@admin_required
+def api_update_user(user_id):
+    data = request.get_json() or {}
+    updates = {f: (data.get(f) or '') for f in ADMIN_USER_FIELDS if f in data}
+    if not updates:
+        return jsonify({'error': 'Không có gì để cập nhật'}), 400
+    conn = get_db()
+    cur = conn.cursor()
+    sets_pg = ', '.join([f"{k} = %s" for k in updates])
+    sets_lite = ', '.join([f"{k} = ?" for k in updates])
+    cur.execute(q(f"UPDATE users SET {sets_pg} WHERE id = %s", f"UPDATE users SET {sets_lite} WHERE id = ?"),
+                list(updates.values()) + [user_id])
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã cập nhật'})
+
+
 # ==================== SETTINGS API ====================
 
-PROFILE_FIELDS = ['full_name', 'avatar', 'title', 'department', 'phone', 'email']
+PROFILE_FIELDS = ['full_name', 'avatar', 'department', 'phone', 'email']
+ADMIN_USER_FIELDS = ['full_name', 'title', 'department']
 PREF_FIELDS = ['theme', 'language', 'timezone', 'date_format', 'time_format', 'default_view',
                'cal_google', 'cal_outlook', 'store_drive', 'store_onedrive', 'store_dropbox',
                'auto_done_unfollow', 'auto_overdue_warn']
