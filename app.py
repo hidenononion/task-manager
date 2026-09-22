@@ -1126,7 +1126,7 @@ def api_create_task():
         "INSERT INTO tasks (title, description, status, priority, due_date, max_assignees, points, estimate_hours, skills, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
         (title, data.get('description', '') or '', data.get('status', 'pending'), data.get('priority', 'medium'),
          due_date, max_assignees, points, est, (data.get('skills') or ''), session['user_id']))
-    task_id = cur.fetchone()['id']
+    task_id = cur.fetchone()['id'] if is_pg() else cur.lastrowid
 
     for uid in assigned_ids:
         cur.execute(q("INSERT INTO task_assignments (task_id, user_id) VALUES (%s, %s)",
@@ -1271,14 +1271,14 @@ def api_smart_assign():
     for u in users:
         uu = dict(u)
         act = cur.execute(q("SELECT COUNT(*) AS c FROM task_assignments ta JOIN tasks t ON ta.task_id = t.id WHERE ta.user_id = %s AND t.status != 'done' AND t.deleted_at IS NULL",
-                            "SELECT COUNT(*) AS c FROM task_assignments ta JOIN tasks t ON ta.task_id = t.id WHERE ta.user_id = %s AND t.status != 'done' AND t.deleted_at IS NULL"),
+                            "SELECT COUNT(*) AS c FROM task_assignments ta JOIN tasks t ON ta.task_id = t.id WHERE ta.user_id = ? AND t.status != 'done' AND t.deleted_at IS NULL"),
                           (uu['id'],)).fetchone()
         workload = dict(act)['c'] if act else 0
         skill_hit = 0
         if need_skills:
             usk = (uu.get('skills') or '').lower()
             skill_hit = sum(1 for w in need_skills.replace(',', ' ').split() if w and w in usk)
-        done_n = cur.execute(q("SELECT COUNT(*) AS c FROM points_log WHERE user_id = %s", "SELECT COUNT(*) AS c FROM points_log WHERE user_id = %s"),
+        done_n = cur.execute(q("SELECT COUNT(*) AS c FROM points_log WHERE user_id = %s", "SELECT COUNT(*) AS c FROM points_log WHERE user_id = ?"),
                              (uu['id'],)).fetchone()
         done_n = dict(done_n)['c'] if done_n else 0
         score = skill_hit * 10 - workload * 3 + min(done_n, 10) * 0.2
@@ -1473,12 +1473,12 @@ def api_workload():
     for u in users:
         uu = dict(u)
         act = cur.execute(q("SELECT COUNT(*) AS c FROM task_assignments ta JOIN tasks t ON ta.task_id = t.id WHERE ta.user_id = %s AND t.status != 'done' AND t.deleted_at IS NULL",
-                            "SELECT COUNT(*) AS c FROM task_assignments ta JOIN tasks t ON ta.task_id = t.id WHERE ta.user_id = %s AND t.status != 'done' AND t.deleted_at IS NULL"),
+                            "SELECT COUNT(*) AS c FROM task_assignments ta JOIN tasks t ON ta.task_id = t.id WHERE ta.user_id = ? AND t.status != 'done' AND t.deleted_at IS NULL"),
                           (uu['id'],)).fetchone()
         over = cur.execute(q("SELECT COUNT(*) AS c FROM task_assignments ta JOIN tasks t ON ta.task_id = t.id WHERE ta.user_id = %s AND t.status != 'done' AND t.deleted_at IS NULL AND t.due_date IS NOT NULL AND t.due_date < CURRENT_DATE",
-                             "SELECT COUNT(*) AS c FROM task_assignments ta JOIN tasks t ON ta.task_id = t.id WHERE ta.user_id = %s AND t.status != 'done' AND t.deleted_at IS NULL AND t.due_date IS NOT NULL AND date(t.due_date) < date('now')"),
+                             "SELECT COUNT(*) AS c FROM task_assignments ta JOIN tasks t ON ta.task_id = t.id WHERE ta.user_id = ? AND t.status != 'done' AND t.deleted_at IS NULL AND t.due_date IS NOT NULL AND date(t.due_date) < date('now')"),
                            (uu['id'],)).fetchone()
-        done = cur.execute(q("SELECT COUNT(*) AS c FROM points_log WHERE user_id = %s", "SELECT COUNT(*) AS c FROM points_log WHERE user_id = %s"),
+        done = cur.execute(q("SELECT COUNT(*) AS c FROM points_log WHERE user_id = %s", "SELECT COUNT(*) AS c FROM points_log WHERE user_id = ?"),
                            (uu['id'],)).fetchone()
         out.append({'id': uu['id'], 'username': uu['username'], 'full_name': uu.get('full_name') or '',
                     'active': dict(act)['c'] if act else 0, 'overdue': dict(over)['c'] if over else 0,
@@ -1494,7 +1494,7 @@ def api_gamification():
     cur = conn.cursor()
     uid = session['user_id']
     rows = cur.execute(q("SELECT DATE(created_at) AS d FROM points_log WHERE user_id = %s AND points > 0 ORDER BY created_at DESC LIMIT 60",
-                         "SELECT date(created_at) AS d FROM points_log WHERE user_id = %s AND points > 0 ORDER BY created_at DESC LIMIT 60"),
+                         "SELECT date(created_at) AS d FROM points_log WHERE user_id = ? AND points > 0 ORDER BY created_at DESC LIMIT 60"),
                        (uid,)).fetchall()
     days = []
     for r in rows:
@@ -1513,7 +1513,7 @@ def api_gamification():
     except Exception:
         pass
     done_n = cur.execute(q("SELECT COUNT(*) AS c FROM points_log WHERE user_id = %s AND points > 0",
-                           "SELECT COUNT(*) AS c FROM points_log WHERE user_id = %s AND points > 0"), (uid,)).fetchone()
+                           "SELECT COUNT(*) AS c FROM points_log WHERE user_id = ? AND points > 0"), (uid,)).fetchone()
     done_n = dict(done_n)['c'] if done_n else 0
     badges = []
     if done_n >= 1:
