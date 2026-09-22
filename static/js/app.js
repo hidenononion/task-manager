@@ -143,6 +143,7 @@ function updateStats() {
     animateCounter('statPending', pending);
     animateCounter('statInProgress', inProgress);
     animateCounter('statDone', done);
+    if (currentUser) document.getElementById('statMyScore').textContent = currentUser.score || 0;
 }
 
 function animateCounter(id, target) {

@@ -656,7 +656,7 @@ a:hover {
 /* ===== STATS CARDS ===== */
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 16px;
     padding: 24px 32px;
 }
@@ -687,6 +687,7 @@ a:hover {
 .stat-card.in-progress::before { background: var(--in-progress); }
 .stat-card.done::before { background: var(--done); }
 .stat-card.total::before { background: linear-gradient(90deg, var(--pending), var(--in-progress), var(--done)); }
+.stat-card.my-score::before { background: var(--warning); }
 
 .stat-card:hover {
     transform: translateY(-4px);
@@ -709,6 +710,7 @@ a:hover {
 .stat-card.in-progress .stat-icon { background: var(--accent-light); color: var(--in-progress); }
 .stat-card.done .stat-icon { background: var(--success-light); color: var(--done); }
 .stat-card.total .stat-icon { background: var(--bg-hover); color: var(--text-primary); }
+.stat-card.my-score .stat-icon { background: var(--warning-light); color: var(--warning); }
 
 .stat-value {
     font-size: 32px;
