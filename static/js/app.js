@@ -22,7 +22,7 @@ async function loadUser() {
         document.getElementById('userName').textContent = currentUser.username;
         document.getElementById('userAvatar').textContent = currentUser.username[0].toUpperCase();
         const roleEl = document.getElementById('userRole');
-        roleEl.textContent = currentUser.role === 'bithu' ? 'Bí thư' : 'Đoàn viên';
+        roleEl.textContent = currentUser.role === 'bithu' ? t('role_bithu') : t('role_user');
         if (currentUser.role === 'bithu') roleEl.classList.add('badge-admin');
 
         const isAdminOrBithu = currentUser.role === 'bithu';
@@ -32,7 +32,7 @@ async function loadUser() {
             document.getElementById('addTaskBtn').style.display = isAdminOrBithu ? 'inline-flex' : 'none';
         }
         fillSettings();
-        if (currentUser.language) applyLang(currentUser.language);
+        applyLang(localStorage.getItem('lang') || currentUser.language || 'vi');
         if (currentUser.default_view && (currentView === 'kanban')) {
             const target = document.querySelector(`.nav-item[data-view="${currentUser.default_view}"]`);
             if (target && currentUser.default_view !== 'kanban') target.click();
@@ -83,7 +83,7 @@ function setupNav() {
             const views = ['kanbanView', 'listView', 'pointsView', 'myPointsView', 'financeView', 'usersView', 'settingsView'];
             views.forEach(v => { const el = document.getElementById(v); if (el) el.style.display = 'none'; });
 
-            const titles = { kanban: 'Kanban Board', list: 'Danh sách', points: 'Điểm tổng hợp', 'my-points': 'Điểm của tôi', finance: 'Tài chính', users: 'Quản lý user', settings: 'Cài đặt' };
+            const titles = { kanban: t('title_kanban'), list: t('title_list'), points: t('title_points'), 'my-points': t('title_mine'), finance: t('title_finance'), users: t('title_users'), settings: t('title_settings') };
             document.getElementById('viewTitle').textContent = titles[currentView] || '';
             document.getElementById('statsGrid').style.display = ['kanban', 'list'].includes(currentView) ? '' : 'none';
 
@@ -174,7 +174,7 @@ function animateCounter(id, target) {
 // ==================== RENDER ====================
 function renderTasks() {
     const tasks = getFilteredTasks();
-    document.getElementById('taskCount').textContent = `${tasks.length} nhiệm vụ`;
+    document.getElementById('taskCount').textContent = `${tasks.length} ${t('tasks_suffix')}`;
     updateStats();
     if (currentView === 'kanban') renderKanban(tasks);
     else if (currentView === 'list') renderList(tasks);
@@ -187,9 +187,9 @@ function renderKanban(tasks) {
     document.getElementById('pendingCount').textContent = pending.length;
     document.getElementById('inProgressCount').textContent = inProgress.length;
     document.getElementById('doneCount').textContent = done.length;
-    document.getElementById('pendingTasks').innerHTML = pending.length ? pending.map(createTaskCard).join('') : '<div class="empty-state"><p>Không có task nào</p></div>';
-    document.getElementById('inProgressTasks').innerHTML = inProgress.length ? inProgress.map(createTaskCard).join('') : '<div class="empty-state"><p>Không có task nào</p></div>';
-    document.getElementById('doneTasks').innerHTML = done.length ? done.map(createTaskCard).join('') : '<div class="empty-state"><p>Không có task nào</p></div>';
+    document.getElementById('pendingTasks').innerHTML = pending.length ? pending.map(createTaskCard).join('') : `<div class="empty-state"><p>${t('empty_tasks')}</p></div>`;
+    document.getElementById('inProgressTasks').innerHTML = inProgress.length ? inProgress.map(createTaskCard).join('') : `<div class="empty-state"><p>${t('empty_tasks')}</p></div>`;
+    document.getElementById('doneTasks').innerHTML = done.length ? done.map(createTaskCard).join('') : `<div class="empty-state"><p>${t('empty_tasks')}</p></div>`;
 }
 
 function createTaskCard(task) {
@@ -205,18 +205,18 @@ function createTaskCard(task) {
 
     const assigneeTags = task.assigned_users.map(u => `<span class="assignee-tag">@${escapeHtml(u.username)}</span>`).join('');
     const slotInfo = `<span class="slot-info">${task.assignee_count}/${task.max_assignees}</span>`;
-    const pointsTag = task.points > 0 ? `<span class="priority-tag low">+${task.points} điểm</span>` : '';
+    const pointsTag = task.points > 0 ? `<span class="priority-tag low">+${task.points}</span>` : '';
 
     let claimBtn = '';
-    if (canClaim) claimBtn = `<button class="btn btn-claim" onclick="claimTask(${task.id})">Nhận task</button>`;
-    else if (isClaimed && !isAdmin) claimBtn = `<button class="btn btn-unclaim" onclick="unclaimTask(${task.id})">Bỏ nhận</button>`;
+    if (canClaim) claimBtn = `<button class="btn btn-claim" onclick="claimTask(${task.id})">${t('claim')}</button>`;
+    else if (isClaimed && !isAdmin) claimBtn = `<button class="btn btn-unclaim" onclick="unclaimTask(${task.id})">${t('unclaim')}</button>`;
 
     let statusSelect = '';
     if (isClaimed || isAdmin) {
         statusSelect = `<select class="status-select" onchange="changeStatus(${task.id}, this.value)">
-            <option value="pending" ${task.status === 'pending' ? 'selected' : ''}>Chờ xử lý</option>
-            <option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>Đang thực hiện</option>
-            <option value="done" ${task.status === 'done' ? 'selected' : ''}>Hoàn thành</option>
+            <option value="pending" ${task.status === 'pending' ? 'selected' : ''}>${getStatusLabel('pending')}</option>
+            <option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>${getStatusLabel('in_progress')}</option>
+            <option value="done" ${task.status === 'done' ? 'selected' : ''}>${getStatusLabel('done')}</option>
         </select>`;
     }
 
@@ -229,7 +229,7 @@ function createTaskCard(task) {
         <div class="task-card-footer">
             <div class="task-card-meta">
                 <span class="priority-tag ${task.priority}">${getPriorityLabel(task.priority)}</span>
-                ${assigneeTags || '<span class="assignee-tag" style="color:var(--text-muted)">Chưa ai nhận</span>'}
+                ${assigneeTags || `<span class="assignee-tag" style="color:var(--text-muted)">${t('no_one')}</span>`}
                 ${slotInfo} ${pointsTag}
                 ${task.due_date ? `<span class="due-date ${isOverdue ? 'overdue' : ''}">${formatDate(task.due_date)}</span>` : ''}
             </div>
@@ -240,7 +240,7 @@ function createTaskCard(task) {
 
 function renderList(tasks) {
     const tbody = document.getElementById('taskTableBody');
-    if (!tasks.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty-state"><p>Không có task nào</p></td></tr>'; return; }
+    if (!tasks.length) { tbody.innerHTML = `<tr><td colspan="8" class="empty-state"><p>${t('empty_tasks')}</p></td></tr>`; return; }
     tbody.innerHTML = tasks.map(task => {
         const isAdmin = currentUser.role === 'bithu';
         const isClaimed = task.is_claimed_by_me;
@@ -248,9 +248,9 @@ function renderList(tasks) {
         const canClaim = !isAdmin && !isClaimed && task.slots_left > 0 && task.status !== 'done';
         let adminActions = isAdmin ? `<button class="btn-icon" onclick="openEditModal(${task.id})">&#9998;</button><button class="btn-icon" onclick="openDeleteModal(${task.id}, '${escapeHtml(task.title)}')">&#10005;</button>` : '';
         const assigneeNames = task.assigned_users.map(u => escapeHtml(u.username)).join(', ');
-        let statusCell = (isClaimed || isAdmin) ? `<select class="status-select" onchange="changeStatus(${task.id}, this.value)"><option value="pending" ${task.status === 'pending' ? 'selected' : ''}>Chờ xử lý</option><option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>Đang thực hiện</option><option value="done" ${task.status === 'done' ? 'selected' : ''}>Hoàn thành</option></select>` : `<span class="status-label">${getStatusLabel(task.status)}</span>`;
-        let claimBtn = canClaim ? `<button class="btn btn-claim btn-sm" onclick="claimTask(${task.id})">Nhận</button>` : isClaimed && !isAdmin ? `<button class="btn btn-unclaim btn-sm" onclick="unclaimTask(${task.id})">Bỏ nhận</button>` : '';
-        return `<tr><td><div class="task-title-cell">${escapeHtml(task.title)}${task.description ? `<small>${escapeHtml(task.description.substring(0, 60))}${task.description.length > 60 ? '...' : ''}</small>` : ''}</div></td><td>${statusCell}</td><td><span class="priority-tag ${task.priority}">${getPriorityLabel(task.priority)}</span></td><td>${assigneeNames || '<span style="color:var(--text-muted)">Chưa ai nhận</span>'}</td><td><span class="slot-info">${task.assignee_count}/${task.max_assignees}</span></td><td>${task.points > 0 ? `<span class="priority-tag low">+${task.points}</span>` : '-'}</td><td>${task.due_date ? `<span class="due-date ${isOverdue ? 'overdue' : ''}">${formatDate(task.due_date)}</span>` : '-'}</td><td>${adminActions}${claimBtn}</td></tr>`;
+        let statusCell = (isClaimed || isAdmin) ? `<select class="status-select" onchange="changeStatus(${task.id}, this.value)"><option value="pending" ${task.status === 'pending' ? 'selected' : ''}>${getStatusLabel('pending')}</option><option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>${getStatusLabel('in_progress')}</option><option value="done" ${task.status === 'done' ? 'selected' : ''}>${getStatusLabel('done')}</option></select>` : `<span class="status-label">${getStatusLabel(task.status)}</span>`;
+        let claimBtn = canClaim ? `<button class="btn btn-claim btn-sm" onclick="claimTask(${task.id})">${t('claim_sm')}</button>` : isClaimed && !isAdmin ? `<button class="btn btn-unclaim btn-sm" onclick="unclaimTask(${task.id})">${t('unclaim')}</button>` : '';
+        return `<tr><td><div class="task-title-cell">${escapeHtml(task.title)}${task.description ? `<small>${escapeHtml(task.description.substring(0, 60))}${task.description.length > 60 ? '...' : ''}</small>` : ''}</div></td><td>${statusCell}</td><td><span class="priority-tag ${task.priority}">${getPriorityLabel(task.priority)}</span></td><td>${assigneeNames || `<span style="color:var(--text-muted)">${t('no_one')}</span>`}</td><td><span class="slot-info">${task.assignee_count}/${task.max_assignees}</span></td><td>${task.points > 0 ? `<span class="priority-tag low">+${task.points}</span>` : '-'}</td><td>${task.due_date ? `<span class="due-date ${isOverdue ? 'overdue' : ''}">${formatDate(task.due_date)}</span>` : '-'}</td><td>${adminActions}${claimBtn}</td></tr>`;
     }).join('');
 }
 
@@ -265,18 +265,18 @@ async function loadPoints() {
 
 function renderPoints() {
     const tbody = document.getElementById('pointsTableBody');
-    if (!allPoints.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state"><p>Chưa có dữ liệu</p></td></tr>'; return; }
-    tbody.innerHTML = allPoints.map((u, i) => `<tr><td>${i + 1}</td><td><strong>${escapeHtml(u.username)}</strong></td><td><span class="priority-tag low" style="font-size:14px;">${u.score} điểm</span></td><td><button class="btn btn-sm btn-secondary" onclick="openPointsDetail(${u.id}, '${escapeHtml(u.username)}')">Xem chi tiết</button></td></tr>`).join('');
+    if (!allPoints.length) { tbody.innerHTML = `<tr><td colspan="4" class="empty-state"><p>${t('no_data')}</p></td></tr>`; return; }
+    tbody.innerHTML = allPoints.map((u, i) => `<tr><td>${i + 1}</td><td><strong>${escapeHtml(u.username)}</strong></td><td><span class="priority-tag low" style="font-size:14px;">${u.score}</span></td><td><button class="btn btn-sm btn-secondary" onclick="openPointsDetail(${u.id}, '${escapeHtml(u.username)}')">${curLang() === 'en' ? 'View detail' : 'Xem chi tiết'}</button></td></tr>`).join('');
 }
 
 async function openPointsDetail(userId, username) {
     try {
         const res = await fetch(`/api/points/${userId}`);
         const data = await res.json();
-        document.getElementById('pointsDetailTitle').textContent = `Điểm - ${username}`;
+        document.getElementById('pointsDetailTitle').textContent = `${curLang() === 'en' ? 'Points' : 'Điểm'} - ${username}`;
         document.getElementById('pointsDetailScore').textContent = data.user.score;
         const tbody = document.getElementById('pointsDetailLogBody');
-        if (!data.logs.length) { tbody.innerHTML = '<tr><td colspan="3" class="empty-state"><p>Chưa có lịch sử</p></td></tr>'; }
+        if (!data.logs.length) { tbody.innerHTML = `<tr><td colspan="3" class="empty-state"><p>${t('no_hist')}</p></td></tr>`; }
         else { tbody.innerHTML = data.logs.map(l => `<tr><td>${formatDate(l.created_at)}</td><td><span class="priority-tag ${l.points >= 0 ? 'low' : 'high'}">${l.points >= 0 ? '+' : ''}${l.points}</span></td><td>${escapeHtml(l.reason)}</td></tr>`).join(''); }
         document.getElementById('pointsDetailModal').classList.add('active');
     } catch (err) { showToast('Lỗi tải dữ liệu', 'error'); }
@@ -316,7 +316,7 @@ async function loadMyPoints() {
         const data = await res.json();
         document.getElementById('myScore').textContent = data.user.score;
         const tbody = document.getElementById('myPointsLogBody');
-        if (!data.logs.length) { tbody.innerHTML = '<tr><td colspan="3" class="empty-state"><p>Chưa có điểm</p></td></tr>'; }
+        if (!data.logs.length) { tbody.innerHTML = `<tr><td colspan="3" class="empty-state"><p>${t('no_points')}</p></td></tr>`; }
         else { tbody.innerHTML = data.logs.map(l => `<tr><td>${formatDate(l.created_at)}</td><td><span class="priority-tag ${l.points >= 0 ? 'low' : 'high'}">${l.points >= 0 ? '+' : ''}${l.points}</span></td><td>${escapeHtml(l.reason)}</td></tr>`).join(''); }
     } catch (err) { showToast('Lỗi tải dữ liệu', 'error'); }
 }
@@ -331,8 +331,8 @@ async function loadFinance() {
         document.getElementById('financeExpense').textContent = formatMoney(summary.expense);
         document.getElementById('financeFund').textContent = formatMoney(summary.fund);
         const tbody = document.getElementById('financeTableBody');
-        if (!transactions.length) { tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><p>Chưa có giao dịch</p></td></tr>'; return; }
-        tbody.innerHTML = transactions.map(t => `<tr><td>${formatDate(t.date)}</td><td><span class="priority-tag ${t.type === 'income' ? 'low' : 'high'}">${t.type === 'income' ? 'Thu' : 'Chi'}</span></td><td><strong>${formatMoney(t.amount)}</strong></td><td>${escapeHtml(t.description) || '-'}</td><td>${escapeHtml(t.category) || '-'}</td><td><button class="btn-icon" onclick="deleteFinance(${t.id})">&#10005;</button></td></tr>`).join('');
+        if (!transactions.length) { tbody.innerHTML = `<tr><td colspan="6" class="empty-state"><p>${t('no_hist')}</p></td></tr>`; return; }
+        tbody.innerHTML = transactions.map(t => `<tr><td>${formatDate(t.date)}</td><td><span class="priority-tag ${t.type === 'income' ? 'low' : 'high'}">${t.type === 'income' ? t('income') : t('expense').split(' ')[0]}</span></td><td><strong>${formatMoney(t.amount)}</strong></td><td>${escapeHtml(t.description) || '-'}</td><td>${escapeHtml(t.category) || '-'}</td><td><button class="btn-icon" onclick="deleteFinance(${t.id})">&#10005;</button></td></tr>`).join('');
     } catch (err) { showToast('Lỗi tải dữ liệu', 'error'); }
 }
 
@@ -409,7 +409,7 @@ function openTaskModal(taskId = null) {
     if (taskId) {
         const task = allTasks.find(t => t.id === taskId);
         if (!task) return;
-        document.getElementById('modalTitle').textContent = 'Sửa nhiệm vụ';
+        document.getElementById('modalTitle').textContent = t('edit_task');
         document.getElementById('taskId').value = task.id;
         document.getElementById('taskTitle').value = task.title;
         document.getElementById('taskDesc').value = task.description || '';
@@ -420,7 +420,7 @@ function openTaskModal(taskId = null) {
         document.getElementById('taskPoints').value = task.points || 0;
         setSelectedAssignees(task.assigned_users.map(u => u.id));
     } else {
-        document.getElementById('modalTitle').textContent = 'Thêm nhiệm vụ mới';
+        document.getElementById('modalTitle').textContent = t('new_task');
         document.getElementById('taskForm').reset();
         document.getElementById('taskId').value = '';
         document.getElementById('taskPriority').value = 'medium';
@@ -481,14 +481,14 @@ async function loadUsersList() {
         const res = await fetch('/api/users');
         const users = await res.json();
         const tbody = document.getElementById('usersTableBody');
-        if (!users.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state"><p>Chưa có user</p></td></tr>'; return; }
+        if (!users.length) { tbody.innerHTML = `<tr><td colspan="5" class="empty-state"><p>${t('no_data')}</p></td></tr>`; return; }
         tbody.innerHTML = users.map(u => {
             const roleOptions = ['user', 'bithu'].map(r =>
-                `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r === 'bithu' ? 'Bí thư' : 'Đoàn viên'}</option>`
+                `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r === 'bithu' ? t('role_bithu') : t('role_user')}</option>`
             ).join('');
             return `<tr>
                 <td><strong>${escapeHtml(u.username)}</strong>${u.full_name ? `<br><small style="color:var(--text-muted)">${escapeHtml(u.full_name)}</small>` : ''}</td>
-                <td><div style="display:flex;gap:4px;"><input type="text" value="${escapeHtml(u.title || '')}" id="title-${u.id}" placeholder="Chức danh" style="width:120px;"><button class="btn btn-sm btn-secondary" onclick="updateUserTitle(${u.id})">Lưu</button></div></td>
+                <td><div style="display:flex;gap:4px;"><input type="text" value="${escapeHtml(u.title || '')}" id="title-${u.id}" placeholder="${t('th_title_col')}" style="width:120px;"><button class="btn btn-sm btn-secondary" onclick="updateUserTitle(${u.id})">${t('save')}</button></div></td>
                 <td><select class="status-select" onchange="updateUserRole(${u.id}, this.value)">${roleOptions}</select></td>
                 <td>${u.score || 0}</td>
                 <td></td>
@@ -542,8 +542,105 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-function getPriorityLabel(p) { return { low: 'Thấp', medium: 'TB', high: 'Cao' }[p] || p; }
-function getStatusLabel(s) { return { pending: 'Chờ xử lý', in_progress: 'Đang thực hiện', done: 'Hoàn thành' }[s] || s; }
+// ==================== I18N ====================
+const I18N = {
+vi: {
+    nav_kanban: 'Kanban Board', nav_list: 'Danh sách', nav_points: 'Điểm tổng hợp', nav_finance: 'Tài chính',
+    nav_users: 'Quản lý user', nav_mine: 'Điểm của tôi', nav_settings: 'Cài đặt', logout: 'Đăng xuất',
+    role_bithu: 'Bí thư', role_user: 'Đoàn viên',
+    stat_total: 'Tổng nhiệm vụ', stat_pending: 'Chờ xử lý', stat_inprog: 'Đang thực hiện', stat_done: 'Hoàn thành', stat_mine: 'Điểm của bạn',
+    tasks_suffix: 'nhiệm vụ', search_ph: 'Tìm nhiệm vụ...', f_all_prio: 'Tất cả ưu tiên', f_all_status: 'Tất cả trạng thái', add_task: '+ Thêm nhiệm vụ',
+    empty_tasks: 'Không có task nào', no_data: 'Chưa có dữ liệu', no_points: 'Chưa có điểm', no_hist: 'Chưa có lịch sử',
+    th_task: 'Nhiệm vụ', th_status: 'Trạng thái', th_priority: 'Ưu tiên', th_assignee: 'Người thực hiện', th_slot: 'Slot',
+    th_points: 'Điểm', th_due: 'Hạn chót', th_action: 'Thao tác', th_no: 'STT', th_member: 'Đoàn viên', th_total: 'Tổng điểm',
+    th_date: 'Ngày', th_point: 'Điểm', th_reason: 'Lý do', th_type: 'Loại', th_amount: 'Số tiền', th_desc: 'Mô tả',
+    th_category: 'Loại chi', th_username: 'Username', th_title_col: 'Chức danh', th_role: 'Role', th_score: 'Điểm',
+    th_time: 'Thời gian', th_ip: 'IP', th_device: 'Thiết bị', th_trigger: 'Trigger', th_event: 'Event', th_url: 'URL', th_deleted: 'Xóa lúc', th_name: 'Tên',
+    points_title: 'Bảng điểm tổng hợp', add_points: '+ Cộng điểm', my_total: 'Tổng điểm của bạn', points_hist: 'Lịch sử điểm',
+    fin_fund: 'Quỹ hiện tại', fin_in: 'Tổng thu', fin_out: 'Tổng chi', fin_hist: 'Lịch sử giao dịch', add_trans: '+ Thêm giao dịch', update_fund: 'Cập nhật quỹ',
+    users_title: 'Quản lý người dùng', save: 'Lưu', cancel: 'Hủy', confirm: 'Xác nhận', close: 'Đóng',
+    claim: 'Nhận task', claim_sm: 'Nhận', unclaim: 'Bỏ nhận', no_one: 'Chưa ai nhận',
+    title_kanban: 'Kanban Board', title_list: 'Danh sách', title_points: 'Điểm tổng hợp', title_mine: 'Điểm của tôi',
+    title_finance: 'Tài chính', title_users: 'Quản lý user', title_settings: 'Cài đặt',
+    tab_profile: 'Hồ sơ', tab_security: 'Bảo mật', tab_display: 'Giao diện', tab_int: 'Tích hợp', tab_data: 'Dữ liệu',
+    profile_h: 'Thông tin cá nhân', lbl_name: 'Họ tên', lbl_dept: 'Phòng ban', lbl_phone: 'Số điện thoại', lbl_email: 'Email liên hệ',
+    lbl_avatar: 'Avatar (URL)', lbl_title_ro: 'Chức danh (chỉ Bí thư đổi)', save_profile: 'Lưu hồ sơ',
+    sec_pass: 'Đổi mật khẩu', old_pass: 'Mật khẩu cũ', new_pass: 'Mật khẩu mới', change_pass_btn: 'Đổi mật khẩu',
+    tfa: 'Xác thực 2 yếu tố (2FA)', tfa_status: 'Trạng thái:', on: 'Bật', off: 'Tắt',
+    tfa_code_lbl: 'Nhập mã 6 số từ app Authenticator', tfa_confirm: 'Xác nhận bật 2FA', tfa_gen: 'Tạo mã 2FA', tfa_off: 'Tắt 2FA',
+    login_hist: 'Lịch sử đăng nhập / Thiết bị',
+    disp_h: 'Chế độ hiển thị', lbl_theme: 'Theme', theme_dark: 'Tối', theme_light: 'Sáng', theme_sys: 'Theo hệ thống',
+    lbl_default_view: 'Giao diện công việc mặc định', lbl_lang: 'Ngôn ngữ', lbl_tz: 'Múi giờ',
+    lbl_datefmt: 'Định dạng ngày', lbl_timefmt: 'Định dạng giờ', save_display: 'Lưu giao diện',
+    int_cal: 'Lịch cá nhân', int_google: 'Đồng bộ deadline sang Google Calendar', int_outlook: 'Đồng bộ deadline sang Outlook Calendar',
+    ics_btn: 'Tải file lịch (.ics)', int_files: 'Lưu trữ tệp', int_auto: 'Quy tắc tự động hóa',
+    auto_unfollow: 'Hoàn thành → tự bỏ theo dõi', auto_warn: 'Quá hạn → cảnh báo', add_rule: '+ Thêm rule',
+    save_int: 'Lưu tích hợp', api_wh: 'API & Webhook', api_token: 'API Token', regen: 'Tạo mới', add_wh: '+ Thêm webhook',
+    data_io: 'Nhập / Xuất dữ liệu', export_tasks: 'Xuất tasks CSV', export_fin: 'Xuất tài chính CSV',
+    import_lbl: 'Dán CSV để nhập tasks (cột: title,description,status,priority,due_date,points)', import_btn: 'Nhập tasks',
+    trash_h: 'Thùng rác (giữ 30 ngày)', trash_empty: 'Thùng rác trống', restore: 'Khôi phục', purge: 'Xóa vĩnh viễn',
+    storage_h: 'Dung lượng',
+    new_task: 'Thêm nhiệm vụ mới', edit_task: 'Sửa nhiệm vụ', lbl_task_title: 'Tiêu đề *', lbl_task_desc: 'Mô tả',
+    lbl_task_status: 'Trạng thái', lbl_task_prio: 'Ưu tiên', assign_to: 'Giao cho (tối đa 3 người)', max_claim: 'Số người tối đa nhận task',
+    due: 'Hạn chót', pts_done: 'Điểm khi hoàn thành',
+    confirm_del: 'Xác nhận xóa', del_q: 'Bạn có chắc muốn xóa nhiệm vụ này?', del_btn: 'Xóa',
+    addsub: 'Cộng/trừ điểm', member: 'Đoàn viên', pts_lbl: 'Điểm (cộng +, trừ -)', reason: 'Lý do', points_total: 'Tổng điểm',
+    add_fin_trans: 'Thêm giao dịch', trans_type: 'Loại giao dịch', income: 'Thu', expense: 'Chi (tự trừ quỹ)',
+    amount: 'Số tiền', desc: 'Mô tả', category: 'Loại chi / Nhóm',
+    update_fund_h: 'Cập nhật quỹ', fund_balance: 'Số dư quỹ hiện tại', op: 'Thao tác',
+    op_set: 'Đặt lại số dư', op_add: 'Cộng thêm', op_sub: 'Trừ bớt'
+},
+en: {
+    nav_kanban: 'Kanban Board', nav_list: 'List', nav_points: 'Points overview', nav_finance: 'Finance',
+    nav_users: 'Users', nav_mine: 'My points', nav_settings: 'Settings', logout: 'Logout',
+    role_bithu: 'Secretary', role_user: 'Member',
+    stat_total: 'Total tasks', stat_pending: 'Pending', stat_inprog: 'In progress', stat_done: 'Done', stat_mine: 'Your points',
+    tasks_suffix: 'tasks', search_ph: 'Search tasks...', f_all_prio: 'All priorities', f_all_status: 'All statuses', add_task: '+ Add task',
+    empty_tasks: 'No tasks', no_data: 'No data', no_points: 'No points yet', no_hist: 'No history',
+    th_task: 'Task', th_status: 'Status', th_priority: 'Priority', th_assignee: 'Assignees', th_slot: 'Slot',
+    th_points: 'Points', th_due: 'Due date', th_action: 'Actions', th_no: '#', th_member: 'Member', th_total: 'Total',
+    th_date: 'Date', th_point: 'Points', th_reason: 'Reason', th_type: 'Type', th_amount: 'Amount', th_desc: 'Description',
+    th_category: 'Category', th_username: 'Username', th_title_col: 'Title', th_role: 'Role', th_score: 'Points',
+    th_time: 'Time', th_ip: 'IP', th_device: 'Device', th_trigger: 'Trigger', th_event: 'Event', th_url: 'URL', th_deleted: 'Deleted at', th_name: 'Name',
+    points_title: 'Points leaderboard', add_points: '+ Add points', my_total: 'Your total points', points_hist: 'Points history',
+    fin_fund: 'Current fund', fin_in: 'Total income', fin_out: 'Total expense', fin_hist: 'Transactions', add_trans: '+ Add transaction', update_fund: 'Update fund',
+    users_title: 'User management', save: 'Save', cancel: 'Cancel', confirm: 'Confirm', close: 'Close',
+    claim: 'Claim task', claim_sm: 'Claim', unclaim: 'Unclaim', no_one: 'Unclaimed',
+    title_kanban: 'Kanban Board', title_list: 'List', title_points: 'Points overview', title_mine: 'My points',
+    title_finance: 'Finance', title_users: 'Users', title_settings: 'Settings',
+    tab_profile: 'Profile', tab_security: 'Security', tab_display: 'Display', tab_int: 'Integrations', tab_data: 'Data',
+    profile_h: 'Personal info', lbl_name: 'Full name', lbl_dept: 'Department', lbl_phone: 'Phone', lbl_email: 'Contact email',
+    lbl_avatar: 'Avatar (URL)', lbl_title_ro: 'Title (Secretary only)', save_profile: 'Save profile',
+    sec_pass: 'Change password', old_pass: 'Old password', new_pass: 'New password', change_pass_btn: 'Change password',
+    tfa: 'Two-factor auth (2FA)', tfa_status: 'Status:', on: 'On', off: 'Off',
+    tfa_code_lbl: 'Enter 6-digit code from Authenticator app', tfa_confirm: 'Confirm enable 2FA', tfa_gen: 'Generate 2FA', tfa_off: 'Disable 2FA',
+    login_hist: 'Login history / Devices',
+    disp_h: 'Display mode', lbl_theme: 'Theme', theme_dark: 'Dark', theme_light: 'Light', theme_sys: 'System',
+    lbl_default_view: 'Default task view', lbl_lang: 'Language', lbl_tz: 'Timezone',
+    lbl_datefmt: 'Date format', lbl_timefmt: 'Time format', save_display: 'Save display',
+    int_cal: 'Personal calendar', int_google: 'Sync deadlines to Google Calendar', int_outlook: 'Sync deadlines to Outlook Calendar',
+    ics_btn: 'Download calendar (.ics)', int_files: 'File storage', int_auto: 'Automation rules',
+    auto_unfollow: 'On complete → auto unclaim', auto_warn: 'On overdue → warn', add_rule: '+ Add rule',
+    save_int: 'Save integrations', api_wh: 'API & Webhook', api_token: 'API Token', regen: 'Regenerate', add_wh: '+ Add webhook',
+    data_io: 'Import / Export', export_tasks: 'Export tasks CSV', export_fin: 'Export finance CSV',
+    import_lbl: 'Paste CSV to import tasks (columns: title,description,status,priority,due_date,points)', import_btn: 'Import tasks',
+    trash_h: 'Trash (kept 30 days)', trash_empty: 'Trash is empty', restore: 'Restore', purge: 'Delete forever',
+    storage_h: 'Storage',
+    new_task: 'Add new task', edit_task: 'Edit task', lbl_task_title: 'Title *', lbl_task_desc: 'Description',
+    lbl_task_status: 'Status', lbl_task_prio: 'Priority', assign_to: 'Assign to (max 3)', max_claim: 'Max claimants',
+    due: 'Due date', pts_done: 'Points on completion',
+    confirm_del: 'Confirm delete', del_q: 'Are you sure you want to delete this task?', del_btn: 'Delete',
+    addsub: 'Add/deduct points', member: 'Member', pts_lbl: 'Points (+ add, - deduct)', reason: 'Reason', points_total: 'Total points',
+    add_fin_trans: 'Add transaction', trans_type: 'Transaction type', income: 'Income', expense: 'Expense (from fund)',
+    amount: 'Amount', desc: 'Description', category: 'Category',
+    update_fund_h: 'Update fund', fund_balance: 'Current balance', op: 'Operation',
+    op_set: 'Reset balance', op_add: 'Add', op_sub: 'Subtract'
+}
+};
+function curLang() { return localStorage.getItem('lang') || (currentUser && currentUser.language) || 'vi'; }
+function t(k) { const L = curLang(); return (I18N[L] && I18N[L][k]) || I18N.vi[k] || k; }
+function getPriorityLabel(p) { const L = curLang() === 'en' ? { low: 'Low', medium: 'Med', high: 'High' } : { low: 'Thấp', medium: 'TB', high: 'Cao' }; return L[p] || p; }
+function getStatusLabel(s) { const L = curLang() === 'en' ? { pending: 'Pending', in_progress: 'In progress', done: 'Done' } : { pending: 'Chờ xử lý', in_progress: 'Đang thực hiện', done: 'Hoàn thành' }; return L[s] || s; }
 function formatDate(d) {
     if (!d) return '';
     const dt = new Date(d);
@@ -626,7 +723,7 @@ function fillSettings() {
     chk('intDropbox', currentUser.store_dropbox);
     chk('autoUnfollow', currentUser.auto_done_unfollow); chk('autoWarn', currentUser.auto_overdue_warn);
     const tok = document.getElementById('apiToken'); if (tok) tok.value = currentUser.api_token || '';
-    const st = document.getElementById('twofaStatus'); if (st) st.textContent = currentUser.twofa_enabled ? 'Đang bật' : 'Tắt';
+    const st = document.getElementById('twofaStatus'); if (st) st.textContent = currentUser.twofa_enabled ? t('on') : t('off');
     if (currentUser.avatar) document.getElementById('userAvatar').textContent = (currentUser.full_name || currentUser.username)[0].toUpperCase();
     localStorage.setItem('date_format', currentUser.date_format || 'DD/MM/YYYY');
     localStorage.setItem('time_format', currentUser.time_format || '24h');
@@ -681,17 +778,42 @@ async function savePrefs(silent) {
 }
 
 function applyLang(lang) {
-    const dict = {
-        vi: { kanban: 'Kanban Board', list: 'Danh sách', mine: 'Điểm của tôi', settings: 'Cài đặt' },
-        en: { kanban: 'Kanban Board', list: 'List', mine: 'My points', settings: 'Settings' }
-    };
-    const d = dict[lang] || dict.vi;
+    if (lang) localStorage.setItem('lang', lang);
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+    document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
+    const icons = { kanban: '&#9638;', list: '&#9776;', points: '&#11088;', finance: '&#128176;', users: '&#128101;', 'my-points': '&#11088;', settings: '&#9881;' };
+    const navKeys = { kanban: 'nav_kanban', list: 'nav_list', points: 'nav_points', finance: 'nav_finance', users: 'nav_users', 'my-points': 'nav_mine', settings: 'nav_settings' };
     document.querySelectorAll('.nav-item').forEach(n => {
-        if (n.dataset.view === 'kanban') n.innerHTML = '<span class="nav-icon">&#9638;</span> ' + d.kanban;
-        if (n.dataset.view === 'list') n.innerHTML = '<span class="nav-icon">&#9776;</span> ' + d.list;
-        if (n.dataset.view === 'my-points') n.innerHTML = '<span class="nav-icon">&#11088;</span> ' + d.mine;
-        if (n.dataset.view === 'settings') n.innerHTML = '<span class="nav-icon">&#9881;</span> ' + d.settings;
+        const k = navKeys[n.dataset.view];
+        if (k) n.innerHTML = `<span class="nav-icon">${icons[n.dataset.view] || ''}</span> ${t(k)}`;
     });
+    const titles = { kanban: t('title_kanban'), list: t('title_list'), points: t('title_points'), 'my-points': t('title_mine'), finance: t('title_finance'), users: t('title_users'), settings: t('title_settings') };
+    const vt = document.getElementById('viewTitle');
+    if (vt && titles[currentView]) vt.textContent = titles[currentView];
+    const fp = document.getElementById('filterPriority');
+    if (fp && fp.options.length >= 4) {
+        fp.options[0].textContent = t('f_all_prio');
+        fp.options[1].textContent = getPriorityLabel('low'); fp.options[2].textContent = getPriorityLabel('medium'); fp.options[3].textContent = getPriorityLabel('high');
+    }
+    const fs = document.getElementById('filterStatus');
+    if (fs && fs.options.length >= 4) {
+        fs.options[0].textContent = t('f_all_status');
+        fs.options[1].textContent = getStatusLabel('pending'); fs.options[2].textContent = getStatusLabel('in_progress'); fs.options[3].textContent = getStatusLabel('done');
+    }
+    const roleEl = document.getElementById('userRole');
+    if (roleEl && currentUser) roleEl.textContent = currentUser.role === 'bithu' ? t('role_bithu') : t('role_user');
+    const setOpts = (id, map) => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        Array.from(sel.options).forEach(o => { if (map[o.value]) o.textContent = map[o.value]; });
+    };
+    setOpts('taskStatus', { pending: getStatusLabel('pending'), in_progress: getStatusLabel('in_progress'), done: getStatusLabel('done') });
+    setOpts('taskPriority', { low: getPriorityLabel('low'), medium: getPriorityLabel('medium'), high: getPriorityLabel('high') });
+    setOpts('financeType', { income: t('income'), expense: t('expense') });
+    setOpts('fundAction', { set: t('op_set'), add: t('op_add'), subtract: t('op_sub') });
+    setOpts('setTheme', { dark: t('theme_dark'), light: t('theme_light'), system: t('theme_sys') });
+    setOpts('setDefaultView', { kanban: 'Kanban', list: t('nav_list') });
+    renderTasks();
 }
 
 async function changePassword() {
@@ -728,7 +850,7 @@ async function loadLoginHistory() {
         const tb = document.getElementById('loginHistoryBody');
         if (!tb) return;
         tb.innerHTML = rows.length ? rows.map(r => `<tr><td>${formatDate(r.created_at)}</td><td>${escapeHtml(r.ip || '-')}</td><td><small>${escapeHtml((r.user_agent || '').substring(0, 60))}</small></td><td><button class="btn-icon" onclick="delSession(${r.id})">&#10005;</button></td></tr>`).join('')
-            : '<tr><td colspan="4" class="empty-state"><p>Chưa có lịch sử</p></td></tr>';
+            : `<tr><td colspan="4" class="empty-state"><p>${t('no_hist')}</p></td></tr>`;
     } catch (e) {}
 }
 async function delSession(id) {
@@ -765,7 +887,7 @@ async function loadRules() {
         if (!res.ok) return;
         const rows = await res.json();
         document.getElementById('rulesBody').innerHTML = rows.length ? rows.map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.trigger || '')}</td><td>${escapeHtml(r.action || '')}</td><td><button class="btn-icon" onclick="delRule(${r.id})">&#10005;</button></td></tr>`).join('')
-            : '<tr><td colspan="4" class="empty-state"><p>Chưa có rule</p></td></tr>';
+            : `<tr><td colspan="4" class="empty-state"><p>${t('no_data')}</p></td></tr>`;
     } catch (e) {}
 }
 async function addRule() {
@@ -788,7 +910,7 @@ async function loadWebhooks() {
         if (!res.ok) return;
         const rows = await res.json();
         document.getElementById('webhooksBody').innerHTML = rows.length ? rows.map(w => `<tr><td><small>${escapeHtml(w.url)}</small></td><td>${escapeHtml(w.event || '')}</td><td><button class="btn-icon" onclick="delWebhook(${w.id})">&#10005;</button></td></tr>`).join('')
-            : '<tr><td colspan="3" class="empty-state"><p>Chưa có webhook</p></td></tr>';
+            : `<tr><td colspan="3" class="empty-state"><p>${t('no_data')}</p></td></tr>`;
     } catch (e) {}
 }
 async function addWebhook() {
@@ -812,8 +934,8 @@ async function loadTrash() {
         const res = await fetch('/api/trash');
         if (!res.ok) return;
         const rows = await res.json();
-        document.getElementById('trashBody').innerHTML = rows.length ? rows.map(t => `<tr><td>${escapeHtml(t.title)}</td><td>${formatDate(t.deleted_at)}</td><td style="white-space:nowrap;"><button class="btn btn-sm btn-secondary" onclick="restoreTrash(${t.id})">Khôi phục</button> <button class="btn btn-sm btn-secondary" onclick="purgeTrash(${t.id})">Xóa vĩnh viễn</button></td></tr>`).join('')
-            : '<tr><td colspan="3" class="empty-state"><p>Thùng rác trống</p></td></tr>';
+        document.getElementById('trashBody').innerHTML = rows.length ? rows.map(t => `<tr><td>${escapeHtml(t.title)}</td><td>${formatDate(t.deleted_at)}</td><td style="white-space:nowrap;"><button class="btn btn-sm btn-secondary" onclick="restoreTrash(${t.id})">${t('restore')}</button> <button class="btn btn-sm btn-secondary" onclick="purgeTrash(${t.id})">${t('purge')}</button></td></tr>`).join('')
+            : `<tr><td colspan="3" class="empty-state"><p>${t('trash_empty')}</p></td></tr>`;
     } catch (e) {}
 }
 async function restoreTrash(id) { await fetch(`/api/trash/${id}/restore`, { method: 'POST' }); loadTrash(); loadTasks(); showToast('Đã khôi phục', 'success'); }

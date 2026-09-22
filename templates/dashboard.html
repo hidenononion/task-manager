@@ -42,7 +42,7 @@
                     <span id="userRole" class="badge">user</span>
                 </div>
             </div>
-            <button class="btn btn-logout" onclick="logout()">Đăng xuất</button>
+            <button class="btn btn-logout" onclick="logout()" data-i18n="logout">Đăng xuất</button>
         </div>
     </aside>
 
@@ -53,27 +53,27 @@
             <div class="stat-card total">
                 <div class="stat-icon">&#128203;</div>
                 <div class="stat-value" id="statTotal">0</div>
-                <div class="stat-label">Tổng nhiệm vụ</div>
+                <div class="stat-label" data-i18n="stat_total">Tổng nhiệm vụ</div>
             </div>
             <div class="stat-card pending">
                 <div class="stat-icon">&#9203;</div>
                 <div class="stat-value" id="statPending">0</div>
-                <div class="stat-label">Chờ xử lý</div>
+                <div class="stat-label" data-i18n="stat_pending">Chờ xử lý</div>
             </div>
             <div class="stat-card in-progress">
                 <div class="stat-icon">&#9654;</div>
                 <div class="stat-value" id="statInProgress">0</div>
-                <div class="stat-label">Đang thực hiện</div>
+                <div class="stat-label" data-i18n="stat_inprog">Đang thực hiện</div>
             </div>
             <div class="stat-card done">
                 <div class="stat-icon">&#10003;</div>
                 <div class="stat-value" id="statDone">0</div>
-                <div class="stat-label">Hoàn thành</div>
+                <div class="stat-label" data-i18n="stat_done">Hoàn thành</div>
             </div>
             <div class="stat-card my-score">
                 <div class="stat-icon">&#11088;</div>
                 <div class="stat-value" id="statMyScore">0</div>
-                <div class="stat-label">Điểm của bạn</div>
+                <div class="stat-label" data-i18n="stat_mine">Điểm của bạn</div>
             </div>
         </div>
 
@@ -86,23 +86,23 @@
             <div class="header-right">
                 <div class="search-bar">
                     <span class="search-icon">&#128269;</span>
-                    <input type="text" id="searchInput" placeholder="Tìm nhiệm vụ..." oninput="renderTasks()">
+                    <input type="text" id="searchInput" placeholder="Tìm nhiệm vụ..." oninput="renderTasks()" data-i18n-ph="search_ph">
                 </div>
                 <div class="filters">
                     <select id="filterPriority" class="filter-select" onchange="renderTasks()">
-                        <option value="">Tất cả ưu tiên</option>
+                        <option value="" data-i18n="f_all_prio">Tất cả ưu tiên</option>
                         <option value="low">Thấp</option>
                         <option value="medium">Trung bình</option>
                         <option value="high">Cao</option>
                     </select>
                     <select id="filterStatus" class="filter-select" onchange="renderTasks()">
-                        <option value="">Tất cả trạng thái</option>
+                        <option value="" data-i18n="f_all_status">Tất cả trạng thái</option>
                         <option value="pending">Chờ xử lý</option>
                         <option value="in_progress">Đang thực hiện</option>
                         <option value="done">Hoàn thành</option>
                     </select>
                 </div>
-                <button class="btn btn-primary admin-only" id="addTaskBtn" onclick="openTaskModal()" style="display:none;">+ Thêm nhiệm vụ</button>
+                <button class="btn btn-primary admin-only" id="addTaskBtn" onclick="openTaskModal()" style="display:none;" data-i18n="add_task">+ Thêm nhiệm vụ</button>
             </div>
         </header>
 
@@ -110,7 +110,7 @@
             <div class="kanban-column" data-status="pending">
                 <div class="column-header">
                     <span class="column-dot pending"></span>
-                    <h3>Chờ xử lý</h3>
+                    <h3 data-i18n="stat_pending">Chờ xử lý</h3>
                     <span class="column-count" id="pendingCount">0</span>
                 </div>
                 <div class="column-body" id="pendingTasks"></div>
@@ -118,7 +118,7 @@
             <div class="kanban-column" data-status="in_progress">
                 <div class="column-header">
                     <span class="column-dot in_progress"></span>
-                    <h3>Đang thực hiện</h3>
+                    <h3 data-i18n="stat_inprog">Đang thực hiện</h3>
                     <span class="column-count" id="inProgressCount">0</span>
                 </div>
                 <div class="column-body" id="inProgressTasks"></div>
@@ -126,7 +126,7 @@
             <div class="kanban-column" data-status="done">
                 <div class="column-header">
                     <span class="column-dot done"></span>
-                    <h3>Hoàn thành</h3>
+                    <h3 data-i18n="stat_done">Hoàn thành</h3>
                     <span class="column-count" id="doneCount">0</span>
                 </div>
                 <div class="column-body" id="doneTasks"></div>
@@ -137,14 +137,14 @@
             <table class="task-table">
                 <thead>
                     <tr>
-                        <th>Nhiệm vụ</th>
-                        <th>Trạng thái</th>
-                        <th>Ưu tiên</th>
-                        <th>Người thực hiện</th>
-                        <th>Slot</th>
-                        <th>Điểm</th>
-                        <th>Hạn chót</th>
-                        <th>Thao tác</th>
+                        <th data-i18n="th_task">Nhiệm vụ</th>
+                        <th data-i18n="th_status">Trạng thái</th>
+                        <th data-i18n="th_priority">Ưu tiên</th>
+                        <th data-i18n="th_assignee">Người thực hiện</th>
+                        <th data-i18n="th_slot">Slot</th>
+                        <th data-i18n="th_points">Điểm</th>
+                        <th data-i18n="th_due">Hạn chót</th>
+                        <th data-i18n="th_action">Thao tác</th>
                     </tr>
                 </thead>
                 <tbody id="taskTableBody"></tbody>
@@ -153,16 +153,16 @@
 
         <div id="pointsView" class="list-view" style="display:none;">
             <div class="points-header">
-                <h3>Bảng điểm tổng hợp</h3>
-                <button class="btn btn-primary" onclick="openAddPointsModal()">+ Cộng điểm</button>
+                <h3 data-i18n="points_title">Bảng điểm tổng hợp</h3>
+                <button class="btn btn-primary" onclick="openAddPointsModal()" data-i18n="add_points">+ Cộng điểm</button>
             </div>
             <table class="task-table">
                 <thead>
                     <tr>
-                        <th>STT</th>
-                        <th>Đoàn viên</th>
-                        <th>Tổng điểm</th>
-                        <th>Thao tác</th>
+                        <th data-i18n="th_no">STT</th>
+                        <th data-i18n="th_member">Đoàn viên</th>
+                        <th data-i18n="th_total">Tổng điểm</th>
+                        <th data-i18n="th_action">Thao tác</th>
                     </tr>
                 </thead>
                 <tbody id="pointsTableBody"></tbody>
@@ -172,15 +172,15 @@
         <div id="myPointsView" class="list-view" style="display:none;">
             <div class="my-points-card">
                 <div class="my-points-score" id="myScore">0</div>
-                <div class="my-points-label">Tổng điểm của bạn</div>
+                <div class="my-points-label" data-i18n="my_total">Tổng điểm của bạn</div>
             </div>
-            <h3 style="margin: 20px 0 12px;">Lịch sử điểm</h3>
+            <h3 style="margin: 20px 0 12px;" data-i18n="points_hist">Lịch sử điểm</h3>
             <table class="task-table">
                 <thead>
                     <tr>
-                        <th>Ngày</th>
-                        <th>Điểm</th>
-                        <th>Lý do</th>
+                        <th data-i18n="th_date">Ngày</th>
+                        <th data-i18n="th_point">Điểm</th>
+                        <th data-i18n="th_reason">Lý do</th>
                     </tr>
                 </thead>
                 <tbody id="myPointsLogBody"></tbody>
@@ -190,32 +190,32 @@
         <div id="financeView" class="list-view" style="display:none;">
             <div class="finance-summary">
                 <div class="finance-card fund">
-                    <div class="finance-label">Quỹ hiện tại</div>
+                    <div class="finance-label" data-i18n="fin_fund">Quỹ hiện tại</div>
                     <div class="finance-amount" id="financeFund">0</div>
-                    <button class="btn btn-sm btn-secondary" onclick="openEditFundModal()" style="margin-top:10px;">Cập nhật quỹ</button>
+                    <button class="btn btn-sm btn-secondary" onclick="openEditFundModal()" style="margin-top:10px;" data-i18n="update_fund">Cập nhật quỹ</button>
                 </div>
                 <div class="finance-card income">
-                    <div class="finance-label">Tổng thu</div>
+                    <div class="finance-label" data-i18n="fin_in">Tổng thu</div>
                     <div class="finance-amount" id="financeIncome">0</div>
                 </div>
                 <div class="finance-card expense">
-                    <div class="finance-label">Tổng chi</div>
+                    <div class="finance-label" data-i18n="fin_out">Tổng chi</div>
                     <div class="finance-amount" id="financeExpense">0</div>
                 </div>
             </div>
             <div class="points-header">
-                <h3>Lịch sử giao dịch</h3>
-                <button class="btn btn-primary" onclick="openAddFinanceModal()">+ Thêm giao dịch</button>
+                <h3 data-i18n="fin_hist">Lịch sử giao dịch</h3>
+                <button class="btn btn-primary" onclick="openAddFinanceModal()" data-i18n="add_trans">+ Thêm giao dịch</button>
             </div>
             <table class="task-table">
                 <thead>
                     <tr>
-                        <th>Ngày</th>
-                        <th>Loại</th>
-                        <th>Số tiền</th>
-                        <th>Mô tả</th>
-                        <th>Loại chi</th>
-                        <th>Thao tác</th>
+                        <th data-i18n="th_date">Ngày</th>
+                        <th data-i18n="th_type">Loại</th>
+                        <th data-i18n="th_amount">Số tiền</th>
+                        <th data-i18n="th_desc">Mô tả</th>
+                        <th data-i18n="th_category">Loại chi</th>
+                        <th data-i18n="th_action">Thao tác</th>
                     </tr>
                 </thead>
                 <tbody id="financeTableBody"></tbody>
@@ -223,15 +223,15 @@
         </div>
 
         <div id="usersView" class="list-view" style="display:none;">
-            <h3 style="margin: 20px 0 12px;">Quản lý người dùng</h3>
+            <h3 style="margin: 20px 0 12px;" data-i18n="users_title">Quản lý người dùng</h3>
             <table class="task-table">
                 <thead>
                     <tr>
-                        <th>Username</th>
-                        <th>Chức danh</th>
-                        <th>Role</th>
-                        <th>Điểm</th>
-                        <th>Thao tác</th>
+                        <th data-i18n="th_username">Username</th>
+                        <th data-i18n="th_title_col">Chức danh</th>
+                        <th data-i18n="th_role">Role</th>
+                        <th data-i18n="th_score">Điểm</th>
+                        <th data-i18n="th_action">Thao tác</th>
                     </tr>
                 </thead>
                 <tbody id="usersTableBody"></tbody>
@@ -240,145 +240,145 @@
 
         <div id="settingsView" class="list-view" style="display:none;">
             <div class="settings-tabs">
-                <button class="settings-tab active" data-tab="profile" onclick="switchSettingsTab('profile')">Hồ sơ</button>
-                <button class="settings-tab" data-tab="security" onclick="switchSettingsTab('security')">Bảo mật</button>
-                <button class="settings-tab" data-tab="display" onclick="switchSettingsTab('display')">Giao diện</button>
-                <button class="settings-tab admin-only" data-tab="integrations" onclick="switchSettingsTab('integrations')" style="display:none;">Tích hợp</button>
-                <button class="settings-tab admin-only" data-tab="data" onclick="switchSettingsTab('data')" style="display:none;">Dữ liệu</button>
+                <button class="settings-tab active" data-tab="profile" onclick="switchSettingsTab('profile')" data-i18n="tab_profile">Hồ sơ</button>
+                <button class="settings-tab" data-tab="security" onclick="switchSettingsTab('security')" data-i18n="tab_security">Bảo mật</button>
+                <button class="settings-tab" data-tab="display" onclick="switchSettingsTab('display')" data-i18n="tab_display">Giao diện</button>
+                <button class="settings-tab admin-only" data-tab="integrations" onclick="switchSettingsTab('integrations')" style="display:none;" data-i18n="tab_int">Tích hợp</button>
+                <button class="settings-tab admin-only" data-tab="data" onclick="switchSettingsTab('data')" style="display:none;" data-i18n="tab_data">Dữ liệu</button>
             </div>
 
             <div class="settings-panel" id="settings-profile">
-                <h3>Thông tin cá nhân</h3>
+                <h3 data-i18n="profile_h">Thông tin cá nhân</h3>
                 <div class="form-row">
-                    <div class="form-group"><label>Họ tên</label><input type="text" id="setFullName" placeholder="Nguyễn Văn A"></div>
-                    <div class="form-group"><label>Phòng ban</label><input type="text" id="setDept" placeholder="Chi đoàn..."></div>
+                    <div class="form-group"><label data-i18n="lbl_name">Họ tên</label><input type="text" id="setFullName" placeholder="Nguyễn Văn A"></div>
+                    <div class="form-group"><label data-i18n="lbl_dept">Phòng ban</label><input type="text" id="setDept" placeholder="Chi đoàn..."></div>
                 </div>
                 <div class="form-row">
-                    <div class="form-group"><label>Số điện thoại</label><input type="text" id="setPhone" placeholder="09..."></div>
-                    <div class="form-group"><label>Email liên hệ</label><input type="email" id="setEmail" placeholder="email@..."></div>
+                    <div class="form-group"><label data-i18n="lbl_phone">Số điện thoại</label><input type="text" id="setPhone" placeholder="09..."></div>
+                    <div class="form-group"><label data-i18n="lbl_email">Email liên hệ</label><input type="email" id="setEmail" placeholder="email@..."></div>
                 </div>
                 <div class="form-row">
-                    <div class="form-group"><label>Avatar (URL)</label><input type="text" id="setAvatar" placeholder="https://..."></div>
-                    <div class="form-group"><label>Chức danh (chỉ Bí thư đổi)</label><input type="text" id="setTitleRO" readonly disabled placeholder="Liên hệ Bí thư"></div>
+                    <div class="form-group"><label data-i18n="lbl_avatar">Avatar (URL)</label><input type="text" id="setAvatar" placeholder="https://..."></div>
+                    <div class="form-group"><label data-i18n="lbl_title_ro">Chức danh (chỉ Bí thư đổi)</label><input type="text" id="setTitleRO" readonly disabled placeholder="Liên hệ Bí thư"></div>
                 </div>
-                <button class="btn btn-primary" onclick="saveProfile()">Lưu hồ sơ</button>
+                <button class="btn btn-primary" onclick="saveProfile()" data-i18n="save_profile">Lưu hồ sơ</button>
             </div>
 
             <div class="settings-panel" id="settings-security" style="display:none;">
-                <h3>Đổi mật khẩu</h3>
+                <h3 data-i18n="sec_pass">Đổi mật khẩu</h3>
                 <div class="form-row">
-                    <div class="form-group"><label>Mật khẩu cũ</label><input type="password" id="oldPass"></div>
-                    <div class="form-group"><label>Mật khẩu mới</label><input type="password" id="newPass"></div>
+                    <div class="form-group"><label data-i18n="old_pass">Mật khẩu cũ</label><input type="password" id="oldPass"></div>
+                    <div class="form-group"><label data-i18n="new_pass">Mật khẩu mới</label><input type="password" id="newPass"></div>
                 </div>
-                <button class="btn btn-primary" onclick="changePassword()">Đổi mật khẩu</button>
+                <button class="btn btn-primary" onclick="changePassword()" data-i18n="change_pass_btn">Đổi mật khẩu</button>
                 <hr style="margin:20px 0;border-color:var(--border);">
-                <h3>Xác thực 2 yếu tố (2FA)</h3>
-                <p style="color:var(--text-secondary);font-size:13px;">Trạng thái: <strong id="twofaStatus">Tắt</strong></p>
+                <h3 data-i18n="tfa">Xác thực 2 yếu tố (2FA)</h3>
+                <p style="color:var(--text-secondary);font-size:13px;"><span data-i18n="tfa_status">Trạng thái:</span> <strong id="twofaStatus">Tắt</strong></p>
                 <div id="twofaSetupBox" style="display:none;background:var(--bg-glass);border:1px solid var(--border);border-radius:12px;padding:12px;margin:10px 0;">
                     <div style="font-size:13px;margin-bottom:6px;">Secret: <code id="twofaSecret"></code></div>
-                    <div class="form-group"><label>Nhập mã 6 số từ app Authenticator</label><input type="text" id="twofaCode" maxlength="6" inputmode="numeric"></div>
-                    <button class="btn btn-primary" onclick="enable2FA()">Xác nhận bật 2FA</button>
+                    <div class="form-group"><label data-i18n="tfa_code_lbl">Nhập mã 6 số từ app Authenticator</label><input type="text" id="twofaCode" maxlength="6" inputmode="numeric"></div>
+                    <button class="btn btn-primary" onclick="enable2FA()" data-i18n="tfa_confirm">Xác nhận bật 2FA</button>
                 </div>
                 <div style="display:flex;gap:8px;margin-top:8px;">
-                    <button class="btn btn-secondary" onclick="setup2FA()">Tạo mã 2FA</button>
-                    <button class="btn btn-secondary" onclick="disable2FA()">Tắt 2FA</button>
+                    <button class="btn btn-secondary" onclick="setup2FA()" data-i18n="tfa_gen">Tạo mã 2FA</button>
+                    <button class="btn btn-secondary" onclick="disable2FA()" data-i18n="tfa_off">Tắt 2FA</button>
                 </div>
                 <hr style="margin:20px 0;border-color:var(--border);">
-                <h3>Lịch sử đăng nhập / Thiết bị</h3>
+                <h3 data-i18n="login_hist">Lịch sử đăng nhập / Thiết bị</h3>
                 <table class="task-table">
-                    <thead><tr><th>Thời gian</th><th>IP</th><th>Thiết bị</th><th></th></tr></thead>
+                    <thead><tr><th data-i18n="th_time">Thời gian</th><th data-i18n="th_ip">IP</th><th data-i18n="th_device">Thiết bị</th><th></th></tr></thead>
                     <tbody id="loginHistoryBody"></tbody>
                 </table>
             </div>
 
             <div class="settings-panel" id="settings-display" style="display:none;">
-                <h3>Chế độ hiển thị</h3>
+                <h3 data-i18n="disp_h">Chế độ hiển thị</h3>
                 <div class="form-row">
-                    <div class="form-group"><label>Theme</label>
+                    <div class="form-group"><label data-i18n="lbl_theme">Theme</label>
                         <select id="setTheme"><option value="dark">Tối</option><option value="light">Sáng</option><option value="system">Theo hệ thống</option></select>
                     </div>
-                    <div class="form-group"><label>Giao diện công việc mặc định</label>
+                    <div class="form-group"><label data-i18n="lbl_default_view">Giao diện công việc mặc định</label>
                         <select id="setDefaultView"><option value="kanban">Kanban</option><option value="list">Danh sách</option></select>
                     </div>
                 </div>
                 <div class="form-row">
-                    <div class="form-group"><label>Ngôn ngữ</label>
+                    <div class="form-group"><label data-i18n="lbl_lang">Ngôn ngữ</label>
                         <select id="setLang"><option value="vi">Tiếng Việt</option><option value="en">English</option></select>
                     </div>
-                    <div class="form-group"><label>Múi giờ</label>
+                    <div class="form-group"><label data-i18n="lbl_tz">Múi giờ</label>
                         <select id="setTz"><option value="Asia/Ho_Chi_Minh">Asia/Ho_Chi_Minh (GMT+7)</option><option value="Asia/Bangkok">Asia/Bangkok (GMT+7)</option><option value="UTC">UTC (GMT+0)</option></select>
                     </div>
                 </div>
                 <div class="form-row">
-                    <div class="form-group"><label>Định dạng ngày</label>
+                    <div class="form-group"><label data-i18n="lbl_datefmt">Định dạng ngày</label>
                         <select id="setDateFmt"><option value="DD/MM/YYYY">DD/MM/YYYY</option><option value="MM/DD/YYYY">MM/DD/YYYY</option></select>
                     </div>
-                    <div class="form-group"><label>Định dạng giờ</label>
+                    <div class="form-group"><label data-i18n="lbl_timefmt">Định dạng giờ</label>
                         <select id="setTimeFmt"><option value="24h">24h</option><option value="12h">12h</option></select>
                     </div>
                 </div>
-                <button class="btn btn-primary" onclick="savePrefs()">Lưu giao diện</button>
+                <button class="btn btn-primary" onclick="savePrefs()" data-i18n="save_display">Lưu giao diện</button>
             </div>
 
             <div class="settings-panel" id="settings-integrations" style="display:none;">
-                <h3>Lịch cá nhân</h3>
-                <label class="checkbox-label"><input type="checkbox" id="intGoogle"> <span>Đồng bộ deadline sang Google Calendar</span></label>
-                <label class="checkbox-label"><input type="checkbox" id="intOutlook"> <span>Đồng bộ deadline sang Outlook Calendar</span></label>
-                <button class="btn btn-secondary" onclick="exportICS()">Tải file lịch (.ics)</button>
+                <h3 data-i18n="int_cal">Lịch cá nhân</h3>
+                <label class="checkbox-label"><input type="checkbox" id="intGoogle"> <span data-i18n="int_google">Đồng bộ deadline sang Google Calendar</span></label>
+                <label class="checkbox-label"><input type="checkbox" id="intOutlook"> <span data-i18n="int_outlook">Đồng bộ deadline sang Outlook Calendar</span></label>
+                <button class="btn btn-secondary" onclick="exportICS()" data-i18n="ics_btn">Tải file lịch (.ics)</button>
                 <hr style="margin:20px 0;border-color:var(--border);">
-                <h3>Lưu trữ tệp</h3>
+                <h3 data-i18n="int_files">Lưu trữ tệp</h3>
                 <label class="checkbox-label"><input type="checkbox" id="intDrive"> <span>Google Drive</span></label>
                 <label class="checkbox-label"><input type="checkbox" id="intOneDrive"> <span>OneDrive</span></label>
                 <label class="checkbox-label"><input type="checkbox" id="intDropbox"> <span>Dropbox</span></label>
                 <hr style="margin:20px 0;border-color:var(--border);">
-                <h3>Quy tắc tự động hóa</h3>
-                <label class="checkbox-label"><input type="checkbox" id="autoUnfollow"> <span>Hoàn thành → tự bỏ theo dõi</span></label>
-                <label class="checkbox-label"><input type="checkbox" id="autoWarn"> <span>Quá hạn → cảnh báo</span></label>
+                <h3 data-i18n="int_auto">Quy tắc tự động hóa</h3>
+                <label class="checkbox-label"><input type="checkbox" id="autoUnfollow"> <span data-i18n="auto_unfollow">Hoàn thành → tự bỏ theo dõi</span></label>
+                <label class="checkbox-label"><input type="checkbox" id="autoWarn"> <span data-i18n="auto_warn">Quá hạn → cảnh báo</span></label>
                 <div class="form-row" style="margin-top:8px;">
                     <div class="form-group"><input type="text" id="ruleName" placeholder="Tên rule VD: Done → unclaim"></div>
                     <div class="form-group"><input type="text" id="ruleTrigger" placeholder="Trigger VD: task.done"></div>
                     <div class="form-group"><input type="text" id="ruleAction" placeholder="Action VD: unclaim"></div>
                 </div>
-                <button class="btn btn-secondary" onclick="addRule()">+ Thêm rule</button>
+                <button class="btn btn-secondary" onclick="addRule()" data-i18n="add_rule">+ Thêm rule</button>
                 <table class="task-table" style="margin-top:10px;">
-                    <thead><tr><th>Tên</th><th>Trigger</th><th>Action</th><th></th></tr></thead>
+                    <thead><tr><th data-i18n="th_name">Tên</th><th data-i18n="th_trigger">Trigger</th><th data-i18n="th_action">Action</th><th></th></tr></thead>
                     <tbody id="rulesBody"></tbody>
                 </table>
-                <button class="btn btn-primary" style="margin-top:10px;" onclick="saveIntegrations()">Lưu tích hợp</button>
+                <button class="btn btn-primary" style="margin-top:10px;" onclick="saveIntegrations()" data-i18n="save_int">Lưu tích hợp</button>
                 <hr style="margin:20px 0;border-color:var(--border);">
                 <h3>API &amp; Webhook</h3>
-                <div class="form-group"><label>API Token</label>
-                    <div style="display:flex;gap:8px;"><input type="text" id="apiToken" readonly style="flex:1;"><button class="btn btn-secondary" onclick="regenToken()">Tạo mới</button></div>
+                <div class="form-group"><label data-i18n="api_token">API Token</label>
+                    <div style="display:flex;gap:8px;"><input type="text" id="apiToken" readonly style="flex:1;"><button class="btn btn-secondary" onclick="regenToken()" data-i18n="regen">Tạo mới</button></div>
                 </div>
                 <div class="form-row">
                     <div class="form-group"><input type="text" id="whUrl" placeholder="https://.../webhook"></div>
                     <div class="form-group"><input type="text" id="whEvent" placeholder="task.done" value="task.done"></div>
                 </div>
-                <button class="btn btn-secondary" onclick="addWebhook()">+ Thêm webhook</button>
+                <button class="btn btn-secondary" onclick="addWebhook()" data-i18n="add_wh">+ Thêm webhook</button>
                 <table class="task-table" style="margin-top:10px;">
-                    <thead><tr><th>URL</th><th>Event</th><th></th></tr></thead>
+                    <thead><tr><th data-i18n="th_url">URL</th><th data-i18n="th_event">Event</th><th></th></tr></thead>
                     <tbody id="webhooksBody"></tbody>
                 </table>
             </div>
 
             <div class="settings-panel" id="settings-data" style="display:none;">
-                <h3>Nhập / Xuất dữ liệu</h3>
+                <h3 data-i18n="data_io">Nhập / Xuất dữ liệu</h3>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                    <button class="btn btn-secondary" onclick="exportCSV('tasks.csv')">Xuất tasks CSV</button>
-                    <button class="btn btn-secondary" onclick="exportCSV('finance.csv')">Xuất tài chính CSV</button>
+                    <button class="btn btn-secondary" onclick="exportCSV('tasks.csv')" data-i18n="export_tasks">Xuất tasks CSV</button>
+                    <button class="btn btn-secondary" onclick="exportCSV('finance.csv')" data-i18n="export_fin">Xuất tài chính CSV</button>
                 </div>
-                <div class="form-group" style="margin-top:10px;"><label>Dán CSV để nhập tasks (cột: title,description,status,priority,due_date,points)</label>
+                <div class="form-group" style="margin-top:10px;"><label data-i18n="import_lbl">Dán CSV để nhập tasks (cột: title,description,status,priority,due_date,points)</label>
                     <textarea id="importCsv" rows="4" placeholder="title,description,status,priority,due_date,points&#10;..."></textarea>
                 </div>
-                <button class="btn btn-primary" onclick="importTasks()">Nhập tasks</button>
+                <button class="btn btn-primary" onclick="importTasks()" data-i18n="import_btn">Nhập tasks</button>
                 <hr style="margin:20px 0;border-color:var(--border);">
-                <h3>Thùng rác (giữ 30 ngày)</h3>
+                <h3 data-i18n="trash_h">Thùng rác (giữ 30 ngày)</h3>
                 <table class="task-table">
-                    <thead><tr><th>Task</th><th>Xóa lúc</th><th></th></tr></thead>
+                    <thead><tr><th data-i18n="th_task">Task</th><th data-i18n="th_deleted">Xóa lúc</th><th></th></tr></thead>
                     <tbody id="trashBody"></tbody>
                 </table>
                 <hr style="margin:20px 0;border-color:var(--border);">
-                <h3>Dung lượng</h3>
+                <h3 data-i18n="storage_h">Dung lượng</h3>
                 <p style="color:var(--text-secondary);font-size:13px;" id="storageInfo">—</p>
             </div>
         </div>
@@ -390,22 +390,22 @@
     <div class="modal-overlay" onclick="closeTaskModal()"></div>
     <div class="modal-content">
         <div class="modal-header">
-            <h3 id="modalTitle">Thêm nhiệm vụ mới</h3>
+            <h3 id="modalTitle" data-i18n="new_task">Thêm nhiệm vụ mới</h3>
             <button class="modal-close" onclick="closeTaskModal()">&times;</button>
         </div>
         <form id="taskForm" class="modal-body">
             <input type="hidden" id="taskId">
             <div class="form-group">
-                <label for="taskTitle">Tiêu đề *</label>
+                <label for="taskTitle" data-i18n="lbl_task_title">Tiêu đề *</label>
                 <input type="text" id="taskTitle" placeholder="Nhập tiêu đề nhiệm vụ" required>
             </div>
             <div class="form-group">
-                <label for="taskDesc">Mô tả</label>
+                <label for="taskDesc" data-i18n="lbl_task_desc">Mô tả</label>
                 <textarea id="taskDesc" rows="3" placeholder="Mô tả chi tiết..."></textarea>
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label for="taskStatus">Trạng thái</label>
+                    <label for="taskStatus" data-i18n="lbl_task_status">Trạng thái</label>
                     <select id="taskStatus">
                         <option value="pending">Chờ xử lý</option>
                         <option value="in_progress">Đang thực hiện</option>
@@ -413,7 +413,7 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="taskPriority">Ưu tiên</label>
+                    <label for="taskPriority" data-i18n="lbl_task_prio">Ưu tiên</label>
                     <select id="taskPriority">
                         <option value="low">Thấp</option>
                         <option value="medium" selected>Trung bình</option>
@@ -422,28 +422,28 @@
                 </div>
             </div>
             <div class="form-group">
-                <label>Giao cho (tối đa 3 người)</label>
+                <label data-i18n="assign_to">Giao cho (tối đa 3 người)</label>
                 <div id="taskAssignees" class="checkbox-group"></div>
             </div>
             <div class="form-row">
                 <div class="form-group">
-                    <label for="taskMaxAssignees">Số người tối đa nhận task</label>
+                    <label for="taskMaxAssignees" data-i18n="max_claim">Số người tối đa nhận task</label>
                     <input type="number" id="taskMaxAssignees" min="1" max="10" value="3">
                 </div>
                 <div class="form-group">
-                    <label for="taskDueDate">Hạn chót</label>
+                    <label for="taskDueDate" data-i18n="due">Hạn chót</label>
                     <input type="date" id="taskDueDate">
                 </div>
             </div>
             <div class="form-group">
-                <label for="taskPoints">Điểm khi hoàn thành</label>
+                <label for="taskPoints" data-i18n="pts_done">Điểm khi hoàn thành</label>
                 <input type="number" id="taskPoints" min="0" value="0" placeholder="0">
             </div>
             <div id="taskFormError" class="error-msg"></div>
         </form>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeTaskModal()">Hủy</button>
-            <button class="btn btn-primary" onclick="saveTask()">Lưu</button>
+            <button class="btn btn-secondary" onclick="closeTaskModal()" data-i18n="cancel">Hủy</button>
+            <button class="btn btn-primary" onclick="saveTask()" data-i18n="save">Lưu</button>
         </div>
     </div>
 </div>
@@ -453,16 +453,16 @@
     <div class="modal-overlay" onclick="closeDeleteModal()"></div>
     <div class="modal-content modal-small">
         <div class="modal-header">
-            <h3>Xác nhận xóa</h3>
+            <h3 data-i18n="confirm_del">Xác nhận xóa</h3>
             <button class="modal-close" onclick="closeDeleteModal()">&times;</button>
         </div>
         <div class="modal-body">
-            <p>Bạn có chắc muốn xóa nhiệm vụ này?</p>
+            <p data-i18n="del_q">Bạn có chắc muốn xóa nhiệm vụ này?</p>
             <p id="deleteTaskName" class="delete-task-name"></p>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeDeleteModal()">Hủy</button>
-            <button class="btn btn-danger" onclick="confirmDelete()">Xóa</button>
+            <button class="btn btn-secondary" onclick="closeDeleteModal()" data-i18n="cancel">Hủy</button>
+            <button class="btn btn-danger" onclick="confirmDelete()" data-i18n="del_btn">Xóa</button>
         </div>
     </div>
 </div>
@@ -472,27 +472,27 @@
     <div class="modal-overlay" onclick="closeAddPointsModal()"></div>
     <div class="modal-content modal-small">
         <div class="modal-header">
-            <h3>Cộng/trừ điểm</h3>
+            <h3 data-i18n="addsub">Cộng/trừ điểm</h3>
             <button class="modal-close" onclick="closeAddPointsModal()">&times;</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
-                <label>Đoàn viên</label>
+                <label data-i18n="member">Đoàn viên</label>
                 <select id="pointsUserId" class="filter-select" style="width:100%;"></select>
             </div>
             <div class="form-group">
-                <label>Điểm (cộng +, trừ -)</label>
+                <label data-i18n="pts_lbl">Điểm (cộng +, trừ -)</label>
                 <input type="number" id="pointsValue" placeholder="VD: 10 hoặc -5">
             </div>
             <div class="form-group">
-                <label>Lý do</label>
+                <label data-i18n="reason">Lý do</label>
                 <input type="text" id="pointsReason" placeholder="Nhập lý do">
             </div>
             <div id="pointsError" class="error-msg"></div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeAddPointsModal()">Hủy</button>
-            <button class="btn btn-primary" onclick="submitPoints()">Xác nhận</button>
+            <button class="btn btn-secondary" onclick="closeAddPointsModal()" data-i18n="cancel">Hủy</button>
+            <button class="btn btn-primary" onclick="submitPoints()" data-i18n="confirm">Xác nhận</button>
         </div>
     </div>
 </div>
@@ -508,21 +508,21 @@
         <div class="modal-body">
             <div class="my-points-card" style="margin-bottom:16px;">
                 <div class="my-points-score" id="pointsDetailScore">0</div>
-                <div class="my-points-label">Tổng điểm</div>
+                <div class="my-points-label" data-i18n="points_total">Tổng điểm</div>
             </div>
             <table class="task-table">
                 <thead>
                     <tr>
-                        <th>Ngày</th>
-                        <th>Điểm</th>
-                        <th>Lý do</th>
+                        <th data-i18n="th_date">Ngày</th>
+                        <th data-i18n="th_point">Điểm</th>
+                        <th data-i18n="th_reason">Lý do</th>
                     </tr>
                 </thead>
                 <tbody id="pointsDetailLogBody"></tbody>
             </table>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closePointsDetailModal()">Đóng</button>
+            <button class="btn btn-secondary" onclick="closePointsDetailModal()" data-i18n="close">Đóng</button>
         </div>
     </div>
 </div>
@@ -532,34 +532,34 @@
     <div class="modal-overlay" onclick="closeAddFinanceModal()"></div>
     <div class="modal-content modal-small">
         <div class="modal-header">
-            <h3>Thêm giao dịch</h3>
+            <h3 data-i18n="add_fin_trans">Thêm giao dịch</h3>
             <button class="modal-close" onclick="closeAddFinanceModal()">&times;</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
-                <label>Loại giao dịch</label>
+                <label data-i18n="trans_type">Loại giao dịch</label>
                 <select id="financeType" class="filter-select" style="width:100%;">
                     <option value="income">Thu</option>
                     <option value="expense">Chi (tự trừ quỹ)</option>
                 </select>
             </div>
             <div class="form-group">
-                <label>Số tiền</label>
+                <label data-i18n="amount">Số tiền</label>
                 <input type="number" id="financeAmount" min="0" placeholder="Nhập số tiền">
             </div>
             <div class="form-group">
-                <label>Mô tả</label>
+                <label data-i18n="desc">Mô tả</label>
                 <input type="text" id="financeDesc" placeholder="Nhập mô tả">
             </div>
             <div class="form-group">
-                <label>Loại chi / Nhóm</label>
+                <label data-i18n="category">Loại chi / Nhóm</label>
                 <input type="text" id="financeCategory" placeholder="VD: Ăn uống, Văn phòng...">
             </div>
             <div id="financeError" class="error-msg"></div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeAddFinanceModal()">Hủy</button>
-            <button class="btn btn-primary" onclick="submitFinance()">Lưu</button>
+            <button class="btn btn-secondary" onclick="closeAddFinanceModal()" data-i18n="cancel">Hủy</button>
+            <button class="btn btn-primary" onclick="submitFinance()" data-i18n="save">Lưu</button>
         </div>
     </div>
 </div>
@@ -569,16 +569,16 @@
     <div class="modal-overlay" onclick="closeEditFundModal()"></div>
     <div class="modal-content modal-small">
         <div class="modal-header">
-            <h3>Cập nhật quỹ</h3>
+            <h3 data-i18n="update_fund_h">Cập nhật quỹ</h3>
             <button class="modal-close" onclick="closeEditFundModal()">&times;</button>
         </div>
         <div class="modal-body">
             <div class="form-group">
-                <label>Số dư quỹ hiện tại</label>
+                <label data-i18n="fund_balance">Số dư quỹ hiện tại</label>
                 <div id="fundCurrentBalance" style="font-size:24px;font-weight:800;color:var(--accent);margin-bottom:12px;">0 VND</div>
             </div>
             <div class="form-group">
-                <label>Thao tác</label>
+                <label data-i18n="op">Thao tác</label>
                 <select id="fundAction" class="filter-select" style="width:100%;">
                     <option value="set">Đặt lại số dư</option>
                     <option value="add">Cộng thêm</option>
@@ -586,14 +586,14 @@
                 </select>
             </div>
             <div class="form-group">
-                <label>Số tiền</label>
+                <label data-i18n="amount">Số tiền</label>
                 <input type="number" id="fundAmount" min="0" placeholder="Nhập số tiền">
             </div>
             <div id="fundError" class="error-msg"></div>
         </div>
         <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeEditFundModal()">Hủy</button>
-            <button class="btn btn-primary" onclick="submitFund()">Xác nhận</button>
+            <button class="btn btn-secondary" onclick="closeEditFundModal()" data-i18n="cancel">Hủy</button>
+            <button class="btn btn-primary" onclick="submitFund()" data-i18n="confirm">Xác nhận</button>
         </div>
     </div>
 </div>
