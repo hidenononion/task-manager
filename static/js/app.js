@@ -19,8 +19,8 @@ async function loadUser() {
         const res = await fetch('/api/me');
         if (!res.ok) { window.location.href = '/login'; return; }
         currentUser = await res.json();
-        document.getElementById('userName').textContent = currentUser.username;
-        document.getElementById('userAvatar').textContent = currentUser.username[0].toUpperCase();
+        document.getElementById('userName').textContent = currentUser.full_name || currentUser.username;
+        document.getElementById('userAvatar').textContent = (currentUser.full_name || currentUser.username)[0].toUpperCase();
         const roleEl = document.getElementById('userRole');
         roleEl.textContent = currentUser.role === 'bithu' ? t('role_bithu') : t('role_user');
         if (currentUser.role === 'bithu') roleEl.classList.add('badge-admin');
