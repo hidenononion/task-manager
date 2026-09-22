@@ -479,12 +479,16 @@ async function saveTask() {
         skills: document.getElementById('taskSkills').value.trim(),
         depends_on: getSelectedDeps()
     };
+    if (!taskId) {
+        payload.subtasks = Array.from(document.querySelectorAll('.ai-sub:checked')).map(c => ({ title: c.value }));
+    }
     try {
         const url = taskId ? `/api/tasks/${taskId}` : '/api/tasks';
         const method = taskId ? 'PUT' : 'POST';
         const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        const data = await res.json();
-        if (!res.ok) { errorEl.textContent = data.error; return; }
+        let data = {};
+        try { data = await res.json(); } catch (e) { errorEl.textContent = `Lỗi server (${res.status})`; return; }
+        if (!res.ok) { errorEl.textContent = data.error || `Lỗi (${res.status})`; return; }
         closeTaskModal();
         await loadTasks();
         showToast(taskId ? 'Đã cập nhật task' : 'Đã tạo task', 'success');

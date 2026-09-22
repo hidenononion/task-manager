@@ -383,7 +383,7 @@ def init_db():
     for col, typ in [('estimate_hours', 'REAL DEFAULT 0'), ('actual_seconds', 'INTEGER DEFAULT 0'),
                      ('skills', "TEXT DEFAULT ''")]:
         try:
-            ensure_column(cur, 'tasks' if col != 'skills' else 'users', col, typ)
+            ensure_column(cur, 'tasks', col, typ)
         except Exception:
             pass
     for col, typ in [('slack_url', "TEXT DEFAULT ''"), ('teams_url', "TEXT DEFAULT ''"),
