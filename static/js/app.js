@@ -31,6 +31,12 @@ async function loadUser() {
         if (document.getElementById('addTaskBtn')) {
             document.getElementById('addTaskBtn').style.display = isAdminOrBithu ? 'inline-flex' : 'none';
         }
+        fillSettings();
+        if (currentUser.language) applyLang(currentUser.language);
+        if (currentUser.default_view && (currentView === 'kanban')) {
+            const target = document.querySelector(`.nav-item[data-view="${currentUser.default_view}"]`);
+            if (target && currentUser.default_view !== 'kanban') target.click();
+        }
     } catch (err) { window.location.href = '/login'; }
 }
 
@@ -41,18 +47,23 @@ function toggleSidebar() {
 }
 
 // ==================== THEME ====================
+function resolveTheme(v) {
+    if (v === 'system') return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    return v || 'dark';
+}
 function loadTheme() {
     const theme = localStorage.getItem('theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.setAttribute('data-theme', resolveTheme(theme));
     updateThemeUI(theme);
 }
 
 function toggleTheme() {
-    const current = document.documentElement.getAttribute('data-theme');
+    const current = localStorage.getItem('theme') || 'dark';
     const next = current === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('theme', next);
+    document.documentElement.setAttribute('data-theme', resolveTheme(next));
     updateThemeUI(next);
+    if (currentUser) savePrefs(true);
 }
 
 function updateThemeUI(theme) {
@@ -69,10 +80,10 @@ function setupNav() {
             item.classList.add('active');
             currentView = item.dataset.view;
 
-            const views = ['kanbanView', 'listView', 'pointsView', 'myPointsView', 'financeView', 'usersView'];
+            const views = ['kanbanView', 'listView', 'pointsView', 'myPointsView', 'financeView', 'usersView', 'settingsView'];
             views.forEach(v => { const el = document.getElementById(v); if (el) el.style.display = 'none'; });
 
-            const titles = { kanban: 'Kanban Board', list: 'Danh sách', points: 'Điểm tổng hợp', 'my-points': 'Điểm của tôi', finance: 'Tài chính', users: 'Quản lý user' };
+            const titles = { kanban: 'Kanban Board', list: 'Danh sách', points: 'Điểm tổng hợp', 'my-points': 'Điểm của tôi', finance: 'Tài chính', users: 'Quản lý user', settings: 'Cài đặt' };
             document.getElementById('viewTitle').textContent = titles[currentView] || '';
             document.getElementById('statsGrid').style.display = ['kanban', 'list'].includes(currentView) ? '' : 'none';
 
@@ -82,6 +93,7 @@ function setupNav() {
             else if (currentView === 'my-points') { document.getElementById('myPointsView').style.display = 'block'; loadMyPoints(); }
             else if (currentView === 'finance') { document.getElementById('financeView').style.display = 'block'; loadFinance(); }
             else if (currentView === 'users') { document.getElementById('usersView').style.display = 'block'; loadUsersList(); }
+            else if (currentView === 'settings') { document.getElementById('settingsView').style.display = 'block'; loadSettings(); }
         });
     });
 }
@@ -516,7 +528,22 @@ function escapeHtml(text) {
 
 function getPriorityLabel(p) { return { low: 'Thấp', medium: 'TB', high: 'Cao' }[p] || p; }
 function getStatusLabel(s) { return { pending: 'Chờ xử lý', in_progress: 'Đang thực hiện', done: 'Hoàn thành' }[s] || s; }
-function formatDate(d) { return d ? new Date(d).toLocaleDateString('vi-VN') : ''; }
+function formatDate(d) {
+    if (!d) return '';
+    const dt = new Date(d);
+    const fmt = localStorage.getItem('date_format') || (currentUser && currentUser.date_format) || 'DD/MM/YYYY';
+    const tf = localStorage.getItem('time_format') || (currentUser && currentUser.time_format) || '24h';
+    const dd = String(dt.getDate()).padStart(2, '0');
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const yyyy = dt.getFullYear();
+    let s = fmt === 'MM/DD/YYYY' ? `${mm}/${dd}/${yyyy}` : `${dd}/${mm}/${yyyy}`;
+    if (String(d).length > 10) {
+        let h = dt.getHours(); const mi = String(dt.getMinutes()).padStart(2, '0');
+        if (tf === '12h') { const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; s += ` ${h}:${mi} ${ap}`; }
+        else s += ` ${String(h).padStart(2, '0')}:${mi}`;
+    }
+    return s;
+}
 function formatMoney(n) { return new Intl.NumberFormat('vi-VN').format(n) + ' VND'; }
 
 // ==================== FUND ====================
@@ -556,3 +583,230 @@ async function submitFund() {
 }
 
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeTaskModal(); closeDeleteModal(); closeAddPointsModal(); closeAddFinanceModal(); closePointsDetailModal(); closeEditFundModal(); } });
+
+// ==================== SETTINGS ====================
+function switchSettingsTab(tab) {
+    document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    ['profile', 'security', 'display', 'integrations', 'data'].forEach(t => {
+        const el = document.getElementById('settings-' + t);
+        if (el) el.style.display = t === tab ? 'block' : 'none';
+    });
+}
+
+function fillSettings() {
+    if (!currentUser) return;
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+    set('setFullName', currentUser.full_name); set('setTitle', currentUser.title);
+    set('setDept', currentUser.department); set('setPhone', currentUser.phone);
+    set('setEmail', currentUser.email); set('setAvatar', currentUser.avatar);
+    set('setTheme', currentUser.theme || localStorage.getItem('theme') || 'dark');
+    set('setDefaultView', currentUser.default_view || 'kanban');
+    set('setLang', currentUser.language || 'vi'); set('setTz', currentUser.timezone || 'Asia/Ho_Chi_Minh');
+    set('setDateFmt', currentUser.date_format || 'DD/MM/YYYY'); set('setTimeFmt', currentUser.time_format || '24h');
+    const chk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+    chk('intGoogle', currentUser.cal_google); chk('intOutlook', currentUser.cal_outlook);
+    chk('intDrive', currentUser.store_drive); chk('intOneDrive', currentUser.store_onedrive);
+    chk('intDropbox', currentUser.store_dropbox);
+    chk('autoUnfollow', currentUser.auto_done_unfollow); chk('autoWarn', currentUser.auto_overdue_warn);
+    const tok = document.getElementById('apiToken'); if (tok) tok.value = currentUser.api_token || '';
+    const st = document.getElementById('twofaStatus'); if (st) st.textContent = currentUser.twofa_enabled ? 'Đang bật' : 'Tắt';
+    if (currentUser.avatar) document.getElementById('userAvatar').textContent = (currentUser.full_name || currentUser.username)[0].toUpperCase();
+    localStorage.setItem('date_format', currentUser.date_format || 'DD/MM/YYYY');
+    localStorage.setItem('time_format', currentUser.time_format || '24h');
+    if (!localStorage.getItem('theme') && currentUser.theme) {
+        localStorage.setItem('theme', currentUser.theme);
+        document.documentElement.setAttribute('data-theme', resolveTheme(currentUser.theme));
+        updateThemeUI(currentUser.theme);
+    }
+}
+
+async function loadSettings() {
+    fillSettings();
+    loadLoginHistory(); loadRules(); loadWebhooks(); loadTrash(); loadStorage();
+    if (currentUser && currentUser.role === 'bithu') { loadRules(); loadWebhooks(); loadTrash(); }
+}
+
+async function saveProfile() {
+    const body = {
+        full_name: document.getElementById('setFullName').value,
+        title: document.getElementById('setTitle').value,
+        department: document.getElementById('setDept').value,
+        phone: document.getElementById('setPhone').value,
+        email: document.getElementById('setEmail').value,
+        avatar: document.getElementById('setAvatar').value
+    };
+    const res = await fetch('/api/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Lỗi lưu', 'error'); return; }
+    currentUser = data; fillSettings();
+    document.getElementById('userName').textContent = currentUser.full_name || currentUser.username;
+    showToast('Đã lưu hồ sơ', 'success');
+}
+
+async function savePrefs(silent) {
+    const body = {
+        theme: document.getElementById('setTheme') ? document.getElementById('setTheme').value : (localStorage.getItem('theme') || 'dark'),
+        default_view: document.getElementById('setDefaultView') ? document.getElementById('setDefaultView').value : 'kanban',
+        language: document.getElementById('setLang') ? document.getElementById('setLang').value : 'vi',
+        timezone: document.getElementById('setTz') ? document.getElementById('setTz').value : 'Asia/Ho_Chi_Minh',
+        date_format: document.getElementById('setDateFmt') ? document.getElementById('setDateFmt').value : 'DD/MM/YYYY',
+        time_format: document.getElementById('setTimeFmt') ? document.getElementById('setTimeFmt').value : '24h'
+    };
+    localStorage.setItem('theme', body.theme);
+    localStorage.setItem('date_format', body.date_format);
+    localStorage.setItem('time_format', body.time_format);
+    document.documentElement.setAttribute('data-theme', resolveTheme(body.theme));
+    updateThemeUI(body.theme);
+    applyLang(body.language);
+    const res = await fetch('/api/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) { if (!silent) showToast('Lỗi lưu giao diện', 'error'); return; }
+    currentUser = await res.json();
+    if (!silent) showToast('Đã lưu giao diện', 'success');
+}
+
+function applyLang(lang) {
+    const dict = {
+        vi: { kanban: 'Kanban Board', list: 'Danh sách', mine: 'Điểm của tôi', settings: 'Cài đặt' },
+        en: { kanban: 'Kanban Board', list: 'List', mine: 'My points', settings: 'Settings' }
+    };
+    const d = dict[lang] || dict.vi;
+    document.querySelectorAll('.nav-item').forEach(n => {
+        if (n.dataset.view === 'kanban') n.innerHTML = '<span class="nav-icon">&#9638;</span> ' + d.kanban;
+        if (n.dataset.view === 'list') n.innerHTML = '<span class="nav-icon">&#9776;</span> ' + d.list;
+        if (n.dataset.view === 'my-points') n.innerHTML = '<span class="nav-icon">&#11088;</span> ' + d.mine;
+        if (n.dataset.view === 'settings') n.innerHTML = '<span class="nav-icon">&#9881;</span> ' + d.settings;
+    });
+}
+
+async function changePassword() {
+    const res = await fetch('/api/change-password', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ old_password: document.getElementById('oldPass').value, new_password: document.getElementById('newPass').value }) });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Lỗi', 'error'); return; }
+    showToast('Đã đổi mật khẩu', 'success');
+    document.getElementById('oldPass').value = ''; document.getElementById('newPass').value = '';
+}
+
+async function setup2FA() {
+    const res = await fetch('/api/2fa/setup', { method: 'POST' });
+    const data = await res.json();
+    document.getElementById('twofaSetupBox').style.display = 'block';
+    document.getElementById('twofaSecret').textContent = data.secret;
+    showToast('Quét secret vào app Authenticator', 'info');
+}
+async function enable2FA() {
+    const res = await fetch('/api/2fa/enable', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: document.getElementById('twofaCode').value }) });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Lỗi', 'error'); return; }
+    currentUser.twofa_enabled = 1; fillSettings(); showToast('Đã bật 2FA', 'success');
+}
+async function disable2FA() {
+    const res = await fetch('/api/2fa/disable', { method: 'POST' });
+    await res.json(); currentUser.twofa_enabled = 0; fillSettings(); showToast('Đã tắt 2FA', 'success');
+}
+async function loadLoginHistory() {
+    try {
+        const res = await fetch('/api/login-history');
+        const rows = await res.json();
+        const tb = document.getElementById('loginHistoryBody');
+        if (!tb) return;
+        tb.innerHTML = rows.length ? rows.map(r => `<tr><td>${formatDate(r.created_at)}</td><td>${escapeHtml(r.ip || '-')}</td><td><small>${escapeHtml((r.user_agent || '').substring(0, 60))}</small></td><td><button class="btn-icon" onclick="delSession(${r.id})">&#10005;</button></td></tr>`).join('')
+            : '<tr><td colspan="4" class="empty-state"><p>Chưa có lịch sử</p></td></tr>';
+    } catch (e) {}
+}
+async function delSession(id) {
+    await fetch(`/api/login-history/${id}`, { method: 'DELETE' });
+    loadLoginHistory(); showToast('Đã xóa phiên', 'success');
+}
+async function saveIntegrations() {
+    const body = {
+        cal_google: document.getElementById('intGoogle').checked ? 1 : 0,
+        cal_outlook: document.getElementById('intOutlook').checked ? 1 : 0,
+        store_drive: document.getElementById('intDrive').checked ? 1 : 0,
+        store_onedrive: document.getElementById('intOneDrive').checked ? 1 : 0,
+        store_dropbox: document.getElementById('intDropbox').checked ? 1 : 0,
+        auto_done_unfollow: document.getElementById('autoUnfollow').checked ? 1 : 0,
+        auto_overdue_warn: document.getElementById('autoWarn').checked ? 1 : 0
+    };
+    const res = await fetch('/api/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) { showToast('Lỗi lưu', 'error'); return; }
+    currentUser = await res.json(); fillSettings(); showToast('Đã lưu tích hợp', 'success');
+}
+function exportICS() {
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//LamKhe//Tasks//VN'];
+    allTasks.filter(t => t.due_date).forEach(t => {
+        const dt = t.due_date.replace(/-/g, '');
+        lines.push('BEGIN:VEVENT', `UID:${t.id}@lamkhe`, `DTSTAMP:${dt}T000000`, `DTSTART:${dt}T000000`, `SUMMARY:${t.title}`, 'END:VEVENT');
+    });
+    lines.push('END:VCALENDAR');
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'tasks.ics'; a.click();
+}
+async function loadRules() {
+    try {
+        const res = await fetch('/api/automation');
+        if (!res.ok) return;
+        const rows = await res.json();
+        document.getElementById('rulesBody').innerHTML = rows.length ? rows.map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.trigger || '')}</td><td>${escapeHtml(r.action || '')}</td><td><button class="btn-icon" onclick="delRule(${r.id})">&#10005;</button></td></tr>`).join('')
+            : '<tr><td colspan="4" class="empty-state"><p>Chưa có rule</p></td></tr>';
+    } catch (e) {}
+}
+async function addRule() {
+    const res = await fetch('/api/automation', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: document.getElementById('ruleName').value, trigger: document.getElementById('ruleTrigger').value, action: document.getElementById('ruleAction').value }) });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Lỗi', 'error'); return; }
+    loadRules(); showToast('Đã thêm rule', 'success');
+}
+async function delRule(id) { await fetch(`/api/automation/${id}`, { method: 'DELETE' }); loadRules(); }
+async function regenToken() {
+    const res = await fetch('/api/api-token', { method: 'POST' });
+    const data = await res.json();
+    document.getElementById('apiToken').value = data.api_token || '';
+    currentUser.api_token = data.api_token; showToast('Đã tạo token mới', 'success');
+}
+async function loadWebhooks() {
+    try {
+        const res = await fetch('/api/webhooks');
+        if (!res.ok) return;
+        const rows = await res.json();
+        document.getElementById('webhooksBody').innerHTML = rows.length ? rows.map(w => `<tr><td><small>${escapeHtml(w.url)}</small></td><td>${escapeHtml(w.event || '')}</td><td><button class="btn-icon" onclick="delWebhook(${w.id})">&#10005;</button></td></tr>`).join('')
+            : '<tr><td colspan="3" class="empty-state"><p>Chưa có webhook</p></td></tr>';
+    } catch (e) {}
+}
+async function addWebhook() {
+    const res = await fetch('/api/webhooks', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: document.getElementById('whUrl').value, event: document.getElementById('whEvent').value }) });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Lỗi', 'error'); return; }
+    loadWebhooks(); showToast('Đã thêm webhook', 'success');
+}
+async function delWebhook(id) { await fetch(`/api/webhooks/${id}`, { method: 'DELETE' }); loadWebhooks(); }
+function exportCSV(kind) { window.location.href = `/api/export/${kind}`; }
+async function importTasks() {
+    const res = await fetch('/api/import/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csv: document.getElementById('importCsv').value }) });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Lỗi', 'error'); return; }
+    showToast(data.message, 'success'); loadTasks();
+}
+async function loadTrash() {
+    try {
+        const res = await fetch('/api/trash');
+        if (!res.ok) return;
+        const rows = await res.json();
+        document.getElementById('trashBody').innerHTML = rows.length ? rows.map(t => `<tr><td>${escapeHtml(t.title)}</td><td>${formatDate(t.deleted_at)}</td><td style="white-space:nowrap;"><button class="btn btn-sm btn-secondary" onclick="restoreTrash(${t.id})">Khôi phục</button> <button class="btn btn-sm btn-secondary" onclick="purgeTrash(${t.id})">Xóa vĩnh viễn</button></td></tr>`).join('')
+            : '<tr><td colspan="3" class="empty-state"><p>Thùng rác trống</p></td></tr>';
+    } catch (e) {}
+}
+async function restoreTrash(id) { await fetch(`/api/trash/${id}/restore`, { method: 'POST' }); loadTrash(); loadTasks(); showToast('Đã khôi phục', 'success'); }
+async function purgeTrash(id) { if (!confirm('Xóa vĩnh viễn?')) return; await fetch(`/api/trash/${id}/purge`, { method: 'DELETE' }); loadTrash(); showToast('Đã xóa vĩnh viễn', 'success'); }
+async function loadStorage() {
+    try {
+        const res = await fetch('/api/storage');
+        const d = await res.json();
+        const el = document.getElementById('storageInfo');
+        if (el) el.textContent = `${d.files} tệp đính kèm • ${(d.bytes / 1024).toFixed(1)} KB • ${d.tasks} task đang hoạt động`;
+    } catch (e) {}
+}

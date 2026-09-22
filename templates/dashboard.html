@@ -26,6 +26,9 @@
             <a href="#" class="nav-item" data-view="my-points">
                 <span class="nav-icon">&#11088;</span> Điểm của tôi
             </a>
+            <a href="#" class="nav-item" data-view="settings">
+                <span class="nav-icon">&#9881;</span> Cài đặt
+            </a>
         </nav>
         <div class="sidebar-footer">
             <button class="theme-toggle" onclick="toggleTheme()">
@@ -232,6 +235,151 @@
                 </thead>
                 <tbody id="usersTableBody"></tbody>
             </table>
+        </div>
+
+        <div id="settingsView" class="list-view" style="display:none;">
+            <div class="settings-tabs">
+                <button class="settings-tab active" data-tab="profile" onclick="switchSettingsTab('profile')">Hồ sơ</button>
+                <button class="settings-tab" data-tab="security" onclick="switchSettingsTab('security')">Bảo mật</button>
+                <button class="settings-tab" data-tab="display" onclick="switchSettingsTab('display')">Giao diện</button>
+                <button class="settings-tab admin-only" data-tab="integrations" onclick="switchSettingsTab('integrations')" style="display:none;">Tích hợp</button>
+                <button class="settings-tab admin-only" data-tab="data" onclick="switchSettingsTab('data')" style="display:none;">Dữ liệu</button>
+            </div>
+
+            <div class="settings-panel" id="settings-profile">
+                <h3>Thông tin cá nhân</h3>
+                <div class="form-row">
+                    <div class="form-group"><label>Họ tên</label><input type="text" id="setFullName" placeholder="Nguyễn Văn A"></div>
+                    <div class="form-group"><label>Chức danh</label><input type="text" id="setTitle" placeholder="Đoàn viên"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Phòng ban</label><input type="text" id="setDept" placeholder="Chi đoàn..."></div>
+                    <div class="form-group"><label>Số điện thoại</label><input type="text" id="setPhone" placeholder="09..."></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Email liên hệ</label><input type="email" id="setEmail" placeholder="email@..."></div>
+                    <div class="form-group"><label>Avatar (URL)</label><input type="text" id="setAvatar" placeholder="https://..."></div>
+                </div>
+                <button class="btn btn-primary" onclick="saveProfile()">Lưu hồ sơ</button>
+            </div>
+
+            <div class="settings-panel" id="settings-security" style="display:none;">
+                <h3>Đổi mật khẩu</h3>
+                <div class="form-row">
+                    <div class="form-group"><label>Mật khẩu cũ</label><input type="password" id="oldPass"></div>
+                    <div class="form-group"><label>Mật khẩu mới</label><input type="password" id="newPass"></div>
+                </div>
+                <button class="btn btn-primary" onclick="changePassword()">Đổi mật khẩu</button>
+                <hr style="margin:20px 0;border-color:var(--border);">
+                <h3>Xác thực 2 yếu tố (2FA)</h3>
+                <p style="color:var(--text-secondary);font-size:13px;">Trạng thái: <strong id="twofaStatus">Tắt</strong></p>
+                <div id="twofaSetupBox" style="display:none;background:var(--bg-glass);border:1px solid var(--border);border-radius:12px;padding:12px;margin:10px 0;">
+                    <div style="font-size:13px;margin-bottom:6px;">Secret: <code id="twofaSecret"></code></div>
+                    <div class="form-group"><label>Nhập mã 6 số từ app Authenticator</label><input type="text" id="twofaCode" maxlength="6" inputmode="numeric"></div>
+                    <button class="btn btn-primary" onclick="enable2FA()">Xác nhận bật 2FA</button>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:8px;">
+                    <button class="btn btn-secondary" onclick="setup2FA()">Tạo mã 2FA</button>
+                    <button class="btn btn-secondary" onclick="disable2FA()">Tắt 2FA</button>
+                </div>
+                <hr style="margin:20px 0;border-color:var(--border);">
+                <h3>Lịch sử đăng nhập / Thiết bị</h3>
+                <table class="task-table">
+                    <thead><tr><th>Thời gian</th><th>IP</th><th>Thiết bị</th><th></th></tr></thead>
+                    <tbody id="loginHistoryBody"></tbody>
+                </table>
+            </div>
+
+            <div class="settings-panel" id="settings-display" style="display:none;">
+                <h3>Chế độ hiển thị</h3>
+                <div class="form-row">
+                    <div class="form-group"><label>Theme</label>
+                        <select id="setTheme"><option value="dark">Tối</option><option value="light">Sáng</option><option value="system">Theo hệ thống</option></select>
+                    </div>
+                    <div class="form-group"><label>Giao diện công việc mặc định</label>
+                        <select id="setDefaultView"><option value="kanban">Kanban</option><option value="list">Danh sách</option></select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Ngôn ngữ</label>
+                        <select id="setLang"><option value="vi">Tiếng Việt</option><option value="en">English</option></select>
+                    </div>
+                    <div class="form-group"><label>Múi giờ</label>
+                        <select id="setTz"><option value="Asia/Ho_Chi_Minh">Asia/Ho_Chi_Minh (GMT+7)</option><option value="Asia/Bangkok">Asia/Bangkok (GMT+7)</option><option value="UTC">UTC (GMT+0)</option></select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Định dạng ngày</label>
+                        <select id="setDateFmt"><option value="DD/MM/YYYY">DD/MM/YYYY</option><option value="MM/DD/YYYY">MM/DD/YYYY</option></select>
+                    </div>
+                    <div class="form-group"><label>Định dạng giờ</label>
+                        <select id="setTimeFmt"><option value="24h">24h</option><option value="12h">12h</option></select>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="savePrefs()">Lưu giao diện</button>
+            </div>
+
+            <div class="settings-panel" id="settings-integrations" style="display:none;">
+                <h3>Lịch cá nhân</h3>
+                <label class="checkbox-label"><input type="checkbox" id="intGoogle"> <span>Đồng bộ deadline sang Google Calendar</span></label>
+                <label class="checkbox-label"><input type="checkbox" id="intOutlook"> <span>Đồng bộ deadline sang Outlook Calendar</span></label>
+                <button class="btn btn-secondary" onclick="exportICS()">Tải file lịch (.ics)</button>
+                <hr style="margin:20px 0;border-color:var(--border);">
+                <h3>Lưu trữ tệp</h3>
+                <label class="checkbox-label"><input type="checkbox" id="intDrive"> <span>Google Drive</span></label>
+                <label class="checkbox-label"><input type="checkbox" id="intOneDrive"> <span>OneDrive</span></label>
+                <label class="checkbox-label"><input type="checkbox" id="intDropbox"> <span>Dropbox</span></label>
+                <hr style="margin:20px 0;border-color:var(--border);">
+                <h3>Quy tắc tự động hóa</h3>
+                <label class="checkbox-label"><input type="checkbox" id="autoUnfollow"> <span>Hoàn thành → tự bỏ theo dõi</span></label>
+                <label class="checkbox-label"><input type="checkbox" id="autoWarn"> <span>Quá hạn → cảnh báo</span></label>
+                <div class="form-row" style="margin-top:8px;">
+                    <div class="form-group"><input type="text" id="ruleName" placeholder="Tên rule VD: Done → unclaim"></div>
+                    <div class="form-group"><input type="text" id="ruleTrigger" placeholder="Trigger VD: task.done"></div>
+                    <div class="form-group"><input type="text" id="ruleAction" placeholder="Action VD: unclaim"></div>
+                </div>
+                <button class="btn btn-secondary" onclick="addRule()">+ Thêm rule</button>
+                <table class="task-table" style="margin-top:10px;">
+                    <thead><tr><th>Tên</th><th>Trigger</th><th>Action</th><th></th></tr></thead>
+                    <tbody id="rulesBody"></tbody>
+                </table>
+                <button class="btn btn-primary" style="margin-top:10px;" onclick="saveIntegrations()">Lưu tích hợp</button>
+                <hr style="margin:20px 0;border-color:var(--border);">
+                <h3>API &amp; Webhook</h3>
+                <div class="form-group"><label>API Token</label>
+                    <div style="display:flex;gap:8px;"><input type="text" id="apiToken" readonly style="flex:1;"><button class="btn btn-secondary" onclick="regenToken()">Tạo mới</button></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><input type="text" id="whUrl" placeholder="https://.../webhook"></div>
+                    <div class="form-group"><input type="text" id="whEvent" placeholder="task.done" value="task.done"></div>
+                </div>
+                <button class="btn btn-secondary" onclick="addWebhook()">+ Thêm webhook</button>
+                <table class="task-table" style="margin-top:10px;">
+                    <thead><tr><th>URL</th><th>Event</th><th></th></tr></thead>
+                    <tbody id="webhooksBody"></tbody>
+                </table>
+            </div>
+
+            <div class="settings-panel" id="settings-data" style="display:none;">
+                <h3>Nhập / Xuất dữ liệu</h3>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button class="btn btn-secondary" onclick="exportCSV('tasks.csv')">Xuất tasks CSV</button>
+                    <button class="btn btn-secondary" onclick="exportCSV('finance.csv')">Xuất tài chính CSV</button>
+                </div>
+                <div class="form-group" style="margin-top:10px;"><label>Dán CSV để nhập tasks (cột: title,description,status,priority,due_date,points)</label>
+                    <textarea id="importCsv" rows="4" placeholder="title,description,status,priority,due_date,points&#10;..."></textarea>
+                </div>
+                <button class="btn btn-primary" onclick="importTasks()">Nhập tasks</button>
+                <hr style="margin:20px 0;border-color:var(--border);">
+                <h3>Thùng rác (giữ 30 ngày)</h3>
+                <table class="task-table">
+                    <thead><tr><th>Task</th><th>Xóa lúc</th><th></th></tr></thead>
+                    <tbody id="trashBody"></tbody>
+                </table>
+                <hr style="margin:20px 0;border-color:var(--border);">
+                <h3>Dung lượng</h3>
+                <p style="color:var(--text-secondary);font-size:13px;" id="storageInfo">—</p>
+            </div>
         </div>
     </main>
 </div>

@@ -14,11 +14,19 @@ async function handleLogin(e) {
     errorEl.textContent = '';
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value.trim();
+    const codeEl = document.getElementById('twofaCode');
+    const code = codeEl ? codeEl.value.trim() : '';
     if (!username || !password) { errorEl.textContent = 'Vui lòng nhập đầy đủ thông tin'; return; }
     try {
-        const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
+        const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password, code }) });
         const data = await res.json();
         if (!res.ok) { errorEl.textContent = data.error || 'Đăng nhập thất bại'; return; }
+        if (data.need_2fa) {
+            document.getElementById('twofaGroup').style.display = 'block';
+            if (codeEl) codeEl.focus();
+            errorEl.textContent = 'Tài khoản bật 2FA — nhập mã 6 số rồi bấm Đăng nhập lại';
+            return;
+        }
         window.location.href = '/dashboard';
     } catch (err) { errorEl.textContent = 'Lỗi kết nối server'; }
 }

@@ -1,10 +1,16 @@
 import os
+import base64
+import csv
 import hashlib
+import hmac
+import io
 import secrets
+import struct
+import time
 from datetime import datetime
 from functools import wraps
 from flask import (  # pyright: ignore[reportMissingImports]
-    Flask, request, jsonify, session, render_template, redirect, url_for
+    Flask, request, jsonify, session, render_template, redirect, url_for, Response
 )
 
 app = Flask(__name__)
@@ -102,6 +108,44 @@ def init_db():
                 updated_at TEXT DEFAULT (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')
             )
         ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS login_history (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                ip TEXT DEFAULT '',
+                user_agent TEXT DEFAULT '',
+                created_at TEXT DEFAULT (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS automation_rules (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                trigger TEXT DEFAULT '',
+                action TEXT DEFAULT '',
+                enabled INTEGER DEFAULT 1,
+                created_by INTEGER REFERENCES users(id)
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS webhooks (
+                id SERIAL PRIMARY KEY,
+                url TEXT NOT NULL,
+                event TEXT DEFAULT 'task.done',
+                enabled INTEGER DEFAULT 1,
+                created_by INTEGER REFERENCES users(id)
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS attachments (
+                id SERIAL PRIMARY KEY,
+                task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+                filename TEXT DEFAULT '',
+                size INTEGER DEFAULT 0,
+                created_by INTEGER REFERENCES users(id),
+                created_at TEXT DEFAULT (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')
+            )
+        ''')
     else:
         cur.executescript('''
             CREATE TABLE IF NOT EXISTS users (
@@ -159,6 +203,41 @@ def init_db():
                 balance REAL DEFAULT 0,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS login_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                ip TEXT DEFAULT '',
+                user_agent TEXT DEFAULT '',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS automation_rules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                trigger TEXT DEFAULT '',
+                action TEXT DEFAULT '',
+                enabled INTEGER DEFAULT 1,
+                created_by INTEGER,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            );
+            CREATE TABLE IF NOT EXISTS webhooks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT NOT NULL,
+                event TEXT DEFAULT 'task.done',
+                enabled INTEGER DEFAULT 1,
+                created_by INTEGER,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            );
+            CREATE TABLE IF NOT EXISTS attachments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER,
+                filename TEXT DEFAULT '',
+                size INTEGER DEFAULT 0,
+                created_by INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            );
         ''')
 
     admin = cur.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()
@@ -180,6 +259,40 @@ def init_db():
             cur.execute('SELECT points FROM tasks LIMIT 1')
         except Exception:
             cur.execute('ALTER TABLE tasks ADD COLUMN points INTEGER DEFAULT 0')
+
+    user_cols = [
+        ('full_name', "TEXT DEFAULT ''"),
+        ('avatar', "TEXT DEFAULT ''"),
+        ('title', "TEXT DEFAULT ''"),
+        ('department', "TEXT DEFAULT ''"),
+        ('phone', "TEXT DEFAULT ''"),
+        ('email', "TEXT DEFAULT ''"),
+        ('twofa_enabled', 'INTEGER DEFAULT 0'),
+        ('twofa_secret', "TEXT DEFAULT ''"),
+        ('api_token', "TEXT DEFAULT ''"),
+        ('theme', "TEXT DEFAULT 'dark'"),
+        ('language', "TEXT DEFAULT 'vi'"),
+        ('timezone', "TEXT DEFAULT 'Asia/Ho_Chi_Minh'"),
+        ('date_format', "TEXT DEFAULT 'DD/MM/YYYY'"),
+        ('time_format', "TEXT DEFAULT '24h'"),
+        ('default_view', "TEXT DEFAULT 'kanban'"),
+        ('cal_google', 'INTEGER DEFAULT 0'),
+        ('cal_outlook', 'INTEGER DEFAULT 0'),
+        ('store_drive', 'INTEGER DEFAULT 0'),
+        ('store_onedrive', 'INTEGER DEFAULT 0'),
+        ('store_dropbox', 'INTEGER DEFAULT 0'),
+        ('auto_done_unfollow', 'INTEGER DEFAULT 0'),
+        ('auto_overdue_warn', 'INTEGER DEFAULT 0'),
+    ]
+    for col, typ in user_cols:
+        try:
+            ensure_column(cur, 'users', col, typ)
+        except Exception:
+            pass
+    try:
+        ensure_column(cur, 'tasks', 'deleted_at', 'TEXT DEFAULT NULL')
+    except Exception:
+        pass
 
     conn.commit()
     conn.close()
@@ -213,6 +326,34 @@ def admin_required(f):
 
 def q(sql_pg, sql_lite):
     return sql_pg if is_pg() else sql_lite
+
+
+def ensure_column(cur, table, column, pg_type):
+    if is_pg():
+        cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {pg_type}")
+    else:
+        try:
+            cur.execute(f'SELECT {column} FROM {table} LIMIT 1')
+        except Exception:
+            lite_type = pg_type.replace('SERIAL PRIMARY KEY', 'INTEGER PRIMARY KEY AUTOINCREMENT')
+            cur.execute(f'ALTER TABLE {table} ADD COLUMN {column} {lite_type}')
+
+
+def totp_verify(secret_b32, code, window=1):
+    try:
+        key = base64.b32decode(secret_b32, casefold=True)
+        code = str(code).strip()
+        t = int(time.time()) // 30
+        for offset in range(-window, window + 1):
+            msg = struct.pack('>Q', t + offset)
+            h = hmac.new(key, msg, hashlib.sha1).digest()
+            o = h[-1] & 0x0F
+            token = (struct.unpack('>I', h[o:o + 4])[0] & 0x7FFFFFFF) % 1000000
+            if f'{token:06d}' == code:
+                return True
+        return False
+    except Exception:
+        return False
 
 
 # ==================== PAGE ROUTES ====================
@@ -274,24 +415,46 @@ def api_register():
 
 @app.route('/api/login', methods=['POST'])
 def api_login():
-    data = request.get_json()
+    data = request.get_json() or {}
     username = data.get('username', '').strip()
     password = data.get('password', '').strip()
+    code = str(data.get('code', '') or '').strip()
 
     conn = get_db()
     cur = conn.cursor()
     user = cur.execute(q("SELECT * FROM users WHERE username = %s AND password = %s",
                          "SELECT * FROM users WHERE username = ? AND password = ?"),
                        (username, hash_password(password))).fetchone()
-    conn.close()
 
     if not user:
+        conn.close()
         return jsonify({'error': 'Sai username hoặc password'}), 401
 
     u = dict(user)
+    if u.get('twofa_enabled'):
+        pending = session.get('pending_2fa')
+        if code and pending == u['id'] and totp_verify(u.get('twofa_secret') or '', code):
+            pass
+        elif code:
+            conn.close()
+            return jsonify({'error': 'Mã 2FA không đúng'}), 401
+        else:
+            session['pending_2fa'] = u['id']
+            conn.close()
+            return jsonify({'need_2fa': True, 'message': 'Nhập mã 2FA'}), 200
+
+    session.pop('pending_2fa', None)
     session['user_id'] = u['id']
     session['username'] = u['username']
     session['role'] = u['role']
+    try:
+        cur.execute(q("INSERT INTO login_history (user_id, ip, user_agent) VALUES (%s, %s, %s)",
+                      "INSERT INTO login_history (user_id, ip, user_agent) VALUES (?, ?, ?)"),
+                    (u['id'], request.remote_addr or '', (request.headers.get('User-Agent') or '')[:300]))
+        conn.commit()
+    except Exception:
+        pass
+    conn.close()
 
     return jsonify({
         'message': 'Đăng nhập thành công',
@@ -314,7 +477,9 @@ def api_me():
                        (session['user_id'],)).fetchone()
     conn.close()
     u = dict(user)
-    return jsonify({'id': u['id'], 'username': u['username'], 'role': u['role'], 'score': u['score']})
+    u.pop('password', None)
+    u.pop('twofa_secret', None)
+    return jsonify(u)
 
 
 # ==================== USERS API ====================
@@ -351,6 +516,351 @@ def api_update_role(user_id):
     return jsonify({'message': 'Đã cập nhật role'})
 
 
+# ==================== SETTINGS API ====================
+
+PROFILE_FIELDS = ['full_name', 'avatar', 'title', 'department', 'phone', 'email']
+PREF_FIELDS = ['theme', 'language', 'timezone', 'date_format', 'time_format', 'default_view',
+               'cal_google', 'cal_outlook', 'store_drive', 'store_onedrive', 'store_dropbox',
+               'auto_done_unfollow', 'auto_overdue_warn']
+INT_FIELDS = {'cal_google', 'cal_outlook', 'store_drive', 'store_onedrive', 'store_dropbox',
+              'auto_done_unfollow', 'auto_overdue_warn', 'twofa_enabled'}
+
+
+@app.route('/api/profile', methods=['PUT'])
+@login_required
+def api_profile_update():
+    data = request.get_json() or {}
+    updates = {}
+    for f in PROFILE_FIELDS + PREF_FIELDS:
+        if f in data:
+            v = data[f]
+            if f in INT_FIELDS:
+                try:
+                    v = 1 if str(v).lower() in ('1', 'true', 'on', 'yes') or v is True or v == 1 else 0
+                except Exception:
+                    v = 0
+            updates[f] = v
+    if not updates:
+        return jsonify({'error': 'Không có gì để cập nhật'}), 400
+    conn = get_db()
+    cur = conn.cursor()
+    sets_pg = ', '.join([f"{k} = %s" for k in updates])
+    sets_lite = ', '.join([f"{k} = ?" for k in updates])
+    vals = list(updates.values()) + [session['user_id']]
+    cur.execute(q(f"UPDATE users SET {sets_pg} WHERE id = %s", f"UPDATE users SET {sets_lite} WHERE id = ?"), vals)
+    conn.commit()
+    user = cur.execute(q("SELECT * FROM users WHERE id = %s", "SELECT * FROM users WHERE id = ?"),
+                       (session['user_id'],)).fetchone()
+    conn.close()
+    u = dict(user)
+    u.pop('password', None)
+    u.pop('twofa_secret', None)
+    return jsonify(u)
+
+
+@app.route('/api/change-password', methods=['POST'])
+@login_required
+def api_change_password():
+    data = request.get_json() or {}
+    old = data.get('old_password', '')
+    new = data.get('new_password', '')
+    if len(new) < 4:
+        return jsonify({'error': 'Mật khẩu mới ít nhất 4 ký tự'}), 400
+    conn = get_db()
+    cur = conn.cursor()
+    user = cur.execute(q("SELECT * FROM users WHERE id = %s", "SELECT * FROM users WHERE id = ?"),
+                       (session['user_id'],)).fetchone()
+    if not user or dict(user)['password'] != hash_password(old):
+        conn.close()
+        return jsonify({'error': 'Mật khẩu cũ không đúng'}), 400
+    cur.execute(q("UPDATE users SET password = %s WHERE id = %s", "UPDATE users SET password = ? WHERE id = ?"),
+                (hash_password(new), session['user_id']))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã đổi mật khẩu'})
+
+
+@app.route('/api/2fa/setup', methods=['POST'])
+@login_required
+def api_2fa_setup():
+    secret = base64.b32encode(secrets.token_bytes(20)).decode().replace('=', '')
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(q("UPDATE users SET twofa_secret = %s WHERE id = %s",
+                  "UPDATE users SET twofa_secret = ? WHERE id = ?"), (secret, session['user_id']))
+    conn.commit()
+    conn.close()
+    conn2 = get_db()
+    user = conn2.cursor().execute(q("SELECT username FROM users WHERE id = %s", "SELECT username FROM users WHERE id = ?"),
+                                  (session['user_id'],)).fetchone()
+    conn2.close()
+    label = dict(user)['username'] if user else 'user'
+    otpauth = f"otpauth://totp/LamKhe:{label}?secret={secret}&issuer=LamKhe"
+    return jsonify({'secret': secret, 'otpauth_url': otpauth})
+
+
+@app.route('/api/2fa/enable', methods=['POST'])
+@login_required
+def api_2fa_enable():
+    data = request.get_json() or {}
+    code = str(data.get('code', ''))
+    conn = get_db()
+    cur = conn.cursor()
+    user = cur.execute(q("SELECT * FROM users WHERE id = %s", "SELECT * FROM users WHERE id = ?"),
+                       (session['user_id'],)).fetchone()
+    u = dict(user)
+    if not totp_verify(u.get('twofa_secret') or '', code):
+        conn.close()
+        return jsonify({'error': 'Mã xác thực không đúng'}), 400
+    cur.execute(q("UPDATE users SET twofa_enabled = 1 WHERE id = %s", "UPDATE users SET twofa_enabled = 1 WHERE id = ?"),
+                (session['user_id'],))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã bật 2FA'})
+
+
+@app.route('/api/2fa/disable', methods=['POST'])
+@login_required
+def api_2fa_disable():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(q("UPDATE users SET twofa_enabled = 0, twofa_secret = '' WHERE id = %s",
+                  "UPDATE users SET twofa_enabled = 0, twofa_secret = '' WHERE id = ?"), (session['user_id'],))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã tắt 2FA'})
+
+
+@app.route('/api/login-history')
+@login_required
+def api_login_history():
+    conn = get_db()
+    cur = conn.cursor()
+    rows = cur.execute(q("SELECT * FROM login_history WHERE user_id = %s ORDER BY created_at DESC LIMIT 50",
+                         "SELECT * FROM login_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 50"),
+                       (session['user_id'],)).fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route('/api/login-history/<int:hid>', methods=['DELETE'])
+@login_required
+def api_login_history_delete(hid):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(q("DELETE FROM login_history WHERE id = %s AND user_id = %s",
+                  "DELETE FROM login_history WHERE id = ? AND user_id = ?"), (hid, session['user_id']))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã xóa phiên'})
+
+
+@app.route('/api/api-token', methods=['POST'])
+@login_required
+def api_token_regen():
+    token = 'lk_' + secrets.token_hex(24)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(q("UPDATE users SET api_token = %s WHERE id = %s", "UPDATE users SET api_token = ? WHERE id = ?"),
+                (token, session['user_id']))
+    conn.commit()
+    conn.close()
+    return jsonify({'api_token': token})
+
+
+@app.route('/api/automation', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def api_automation():
+    conn = get_db()
+    cur = conn.cursor()
+    if request.method == 'GET':
+        rows = cur.execute("SELECT * FROM automation_rules ORDER BY id DESC").fetchall()
+        conn.close()
+        return jsonify([dict(r) for r in rows])
+    data = request.get_json() or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        conn.close()
+        return jsonify({'error': 'Thiếu tên rule'}), 400
+    cur.execute(q("INSERT INTO automation_rules (name, trigger, action, enabled, created_by) VALUES (%s, %s, %s, %s, %s)",
+                  "INSERT INTO automation_rules (name, trigger, action, enabled, created_by) VALUES (?, ?, ?, ?, ?)"),
+                (name, data.get('trigger', ''), data.get('action', ''), 1 if data.get('enabled', True) else 0, session['user_id']))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã tạo rule'}), 201
+
+
+@app.route('/api/automation/<int:rid>', methods=['PUT', 'DELETE'])
+@login_required
+@admin_required
+def api_automation_one(rid):
+    conn = get_db()
+    cur = conn.cursor()
+    if request.method == 'DELETE':
+        cur.execute(q("DELETE FROM automation_rules WHERE id = %s", "DELETE FROM automation_rules WHERE id = ?"), (rid,))
+        conn.commit()
+        conn.close()
+        return jsonify({'message': 'Đã xóa rule'})
+    data = request.get_json() or {}
+    cur.execute(q("UPDATE automation_rules SET name = %s, trigger = %s, action = %s, enabled = %s WHERE id = %s",
+                  "UPDATE automation_rules SET name = ?, trigger = ?, action = ?, enabled = ? WHERE id = ?"),
+                (data.get('name', ''), data.get('trigger', ''), data.get('action', ''),
+                 1 if data.get('enabled', True) else 0, rid))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã cập nhật rule'})
+
+
+@app.route('/api/webhooks', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def api_webhooks():
+    conn = get_db()
+    cur = conn.cursor()
+    if request.method == 'GET':
+        rows = cur.execute("SELECT * FROM webhooks ORDER BY id DESC").fetchall()
+        conn.close()
+        return jsonify([dict(r) for r in rows])
+    data = request.get_json() or {}
+    url = (data.get('url') or '').strip()
+    if not url:
+        conn.close()
+        return jsonify({'error': 'Thiếu URL'}), 400
+    cur.execute(q("INSERT INTO webhooks (url, event, enabled, created_by) VALUES (%s, %s, %s, %s)",
+                  "INSERT INTO webhooks (url, event, enabled, created_by) VALUES (?, ?, ?, ?)"),
+                (url, data.get('event', 'task.done'), 1 if data.get('enabled', True) else 0, session['user_id']))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã thêm webhook'}), 201
+
+
+@app.route('/api/webhooks/<int:wid>', methods=['DELETE'])
+@login_required
+@admin_required
+def api_webhook_delete(wid):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(q("DELETE FROM webhooks WHERE id = %s", "DELETE FROM webhooks WHERE id = ?"), (wid,))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã xóa webhook'})
+
+
+@app.route('/api/export/<kind>')
+@login_required
+def api_export(kind):
+    conn = get_db()
+    cur = conn.cursor()
+    out = io.StringIO()
+    w = csv.writer(out)
+    if kind == 'tasks.csv':
+        rows = cur.execute("SELECT id, title, description, status, priority, due_date, points, created_at FROM tasks WHERE deleted_at IS NULL ORDER BY id").fetchall()
+        w.writerow(['id', 'title', 'description', 'status', 'priority', 'due_date', 'points', 'created_at'])
+        for r in rows:
+            d = dict(r)
+            w.writerow([d.get('id'), d.get('title'), d.get('description'), d.get('status'), d.get('priority'), d.get('due_date'), d.get('points'), d.get('created_at')])
+    elif kind == 'finance.csv':
+        rows = cur.execute("SELECT id, type, amount, description, category, date FROM finance ORDER BY id").fetchall()
+        w.writerow(['id', 'type', 'amount', 'description', 'category', 'date'])
+        for r in rows:
+            d = dict(r)
+            w.writerow([d.get('id'), d.get('type'), d.get('amount'), d.get('description'), d.get('category'), d.get('date')])
+    else:
+        conn.close()
+        return jsonify({'error': 'Loại không hỗ trợ'}), 400
+    conn.close()
+    return Response(out.getvalue(), mimetype='text/csv',
+                    headers={'Content-Disposition': f'attachment; filename={kind}'})
+
+
+@app.route('/api/import/tasks', methods=['POST'])
+@login_required
+@admin_required
+def api_import_tasks():
+    data = request.get_json() or {}
+    text = data.get('csv', '')
+    if not text.strip():
+        return jsonify({'error': 'Thiếu nội dung CSV'}), 400
+    reader = csv.DictReader(io.StringIO(text))
+    conn = get_db()
+    cur = conn.cursor()
+    count = 0
+    for row in reader:
+        title = (row.get('title') or '').strip()
+        if not title:
+            continue
+        try:
+            pts = int(float(row.get('points') or 0))
+        except Exception:
+            pts = 0
+        cur.execute(q("INSERT INTO tasks (title, description, status, priority, due_date, points, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                      "INSERT INTO tasks (title, description, status, priority, due_date, points, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)"),
+                    (title, row.get('description', ''), row.get('status', 'pending') or 'pending',
+                     row.get('priority', 'medium') or 'medium', row.get('due_date') or None, pts, session['user_id']))
+        count += 1
+    conn.commit()
+    conn.close()
+    return jsonify({'message': f'Đã nhập {count} task'}), 201
+
+
+@app.route('/api/trash')
+@login_required
+@admin_required
+def api_trash():
+    conn = get_db()
+    cur = conn.cursor()
+    rows = cur.execute("SELECT * FROM tasks WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC").fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route('/api/trash/<int:task_id>/restore', methods=['POST'])
+@login_required
+@admin_required
+def api_trash_restore(task_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(q("UPDATE tasks SET deleted_at = NULL WHERE id = %s", "UPDATE tasks SET deleted_at = NULL WHERE id = ?"), (task_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã khôi phục'})
+
+
+@app.route('/api/trash/<int:task_id>/purge', methods=['DELETE'])
+@login_required
+@admin_required
+def api_trash_purge(task_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(q("DELETE FROM points_log WHERE task_id = %s", "DELETE FROM points_log WHERE task_id = ?"), (task_id,))
+    cur.execute(q("DELETE FROM task_assignments WHERE task_id = %s", "DELETE FROM task_assignments WHERE task_id = ?"), (task_id,))
+    cur.execute(q("DELETE FROM attachments WHERE task_id = %s", "DELETE FROM attachments WHERE task_id = ?"), (task_id,))
+    cur.execute(q("DELETE FROM tasks WHERE id = %s", "DELETE FROM tasks WHERE id = ?"), (task_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã xóa vĩnh viễn'})
+
+
+@app.route('/api/storage')
+@login_required
+def api_storage():
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        rows = cur.execute("SELECT COUNT(*) AS n, COALESCE(SUM(size),0) AS s FROM attachments").fetchone()
+        d = dict(rows)
+    except Exception:
+        d = {'n': 0, 's': 0}
+    try:
+        t = cur.execute("SELECT COUNT(*) AS c FROM tasks WHERE deleted_at IS NULL").fetchone()
+        tasks_n = dict(t)['c']
+    except Exception:
+        tasks_n = 0
+    conn.close()
+    return jsonify({'files': d.get('n', 0), 'bytes': d.get('s', 0), 'tasks': tasks_n})
+
+
 # ==================== TASKS API ====================
 
 def get_task_assignees(conn, task_id):
@@ -382,9 +892,9 @@ def api_tasks():
     user_id = session['user_id']
 
     if role in 'bithu':
-        tasks = cur.execute("SELECT * FROM tasks ORDER BY created_at DESC").fetchall()
+        tasks = cur.execute("SELECT * FROM tasks WHERE deleted_at IS NULL ORDER BY created_at DESC").fetchall()
     else:
-        tasks = cur.execute("SELECT * FROM tasks ORDER BY created_at DESC").fetchall()
+        tasks = cur.execute("SELECT * FROM tasks WHERE deleted_at IS NULL ORDER BY created_at DESC").fetchall()
 
     result = [serialize_task(conn, t, user_id, role) for t in tasks]
     conn.close()
@@ -487,12 +997,11 @@ def api_delete_task(task_id):
     if not task:
         conn.close()
         return jsonify({'error': 'Task không tồn tại'}), 404
-    cur.execute(q("DELETE FROM points_log WHERE task_id = %s", "DELETE FROM points_log WHERE task_id = ?"), (task_id,))
-    cur.execute(q("DELETE FROM task_assignments WHERE task_id = %s", "DELETE FROM task_assignments WHERE task_id = ?"), (task_id,))
-    cur.execute(q("DELETE FROM tasks WHERE id = %s", "DELETE FROM tasks WHERE id = ?"), (task_id,))
+    cur.execute(q("UPDATE tasks SET deleted_at = NOW() WHERE id = %s",
+                  "UPDATE tasks SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?"), (task_id,))
     conn.commit()
     conn.close()
-    return jsonify({'message': 'Đã xóa task'})
+    return jsonify({'message': 'Đã chuyển vào thùng rác'})
 
 
 # ==================== CLAIM / UNCLAIM ====================
@@ -624,6 +1133,18 @@ def api_update_status(task_id):
         cur.execute(q("INSERT INTO finance (type, amount, description, category, created_by) VALUES (%s, %s, %s, %s, %s)",
                       "INSERT INTO finance (type, amount, description, category, created_by) VALUES (?, ?, ?, ?, ?)"),
                     ('income', task['points'], f"Thu từ task: {task['title']}", 'Task', session['user_id']))
+
+    if new_status == 'done' and old_status != 'done':
+        try:
+            me = cur.execute(q("SELECT auto_done_unfollow FROM users WHERE id = %s",
+                               "SELECT auto_done_unfollow FROM users WHERE id = ?"),
+                             (session['user_id'],)).fetchone()
+            if me and dict(me).get('auto_done_unfollow'):
+                cur.execute(q("DELETE FROM task_assignments WHERE task_id = %s AND user_id = %s",
+                              "DELETE FROM task_assignments WHERE task_id = ? AND user_id = ?"),
+                            (task_id, session['user_id']))
+        except Exception:
+            pass
 
     conn.commit()
     updated = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
