@@ -1037,8 +1037,11 @@ a:hover {
     flex: 1;
 }
 
-/* ===== SETTINGS ===== */
-.settings-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+/* ===== GANTT / CALENDAR / WORKLOAD ===== */
+#ganttBody, #calBody, #workloadBody { padding-bottom: 24px; }
+.task-card-title:hover { color: var(--accent); }
+
+/* ===== SETTINGS ===== */.settings-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 .settings-tab {
     background: var(--bg-glass); border: 1px solid var(--border); color: var(--text-secondary);
     padding: 8px 16px; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 600;

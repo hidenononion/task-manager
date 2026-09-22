@@ -14,6 +14,15 @@
             <a href="#" class="nav-item" data-view="list">
                 <span class="nav-icon">&#9776;</span> Danh sách
             </a>
+            <a href="#" class="nav-item" data-view="gantt">
+                <span class="nav-icon">&#128207;</span> <span data-i18n="nav_gantt">Tiến độ</span>
+            </a>
+            <a href="#" class="nav-item" data-view="calendar">
+                <span class="nav-icon">&#128197;</span> <span data-i18n="nav_cal">Lịch</span>
+            </a>
+            <a href="#" class="nav-item" data-view="workload">
+                <span class="nav-icon">&#128202;</span> <span data-i18n="nav_workload">Khối lượng</span>
+            </a>
             <a href="#" class="nav-item admin-only" data-view="points" style="display:none;">
                 <span class="nav-icon">&#11088;</span> Điểm tổng hợp
             </a>
@@ -134,9 +143,21 @@
         </div>
 
         <div id="listView" class="list-view" style="display:none;">
+            <div class="points-header">
+                <div>
+                    <button class="btn btn-sm btn-secondary" onclick="toggleBulk()" id="bulkBtn">Chọn nhiều</button>
+                    <span id="bulkBar" style="display:none;margin-left:8px;">
+                        <button class="btn btn-sm btn-secondary" onclick="bulkSetStatus('pending')">Chờ xử lý</button>
+                        <button class="btn btn-sm btn-secondary" onclick="bulkSetStatus('in_progress')">Đang làm</button>
+                        <button class="btn btn-sm btn-secondary" onclick="bulkSetStatus('done')">Hoàn thành</button>
+                        <button class="btn btn-sm btn-primary" onclick="bulkClaim()">Nhận hết (M)</button>
+                    </span>
+                </div>
+            </div>
             <table class="task-table">
                 <thead>
                     <tr>
+                        <th class="bulk-col" style="display:none;"><input type="checkbox" onchange="toggleBulkAll(this.checked)"></th>
                         <th data-i18n="th_task">Nhiệm vụ</th>
                         <th data-i18n="th_status">Trạng thái</th>
                         <th data-i18n="th_priority">Ưu tiên</th>
@@ -149,6 +170,51 @@
                 </thead>
                 <tbody id="taskTableBody"></tbody>
             </table>
+        </div>
+
+        <div id="ganttView" class="list-view" style="display:none;">
+            <h3 style="margin: 20px 0 12px;" data-i18n="gantt_h">Tiến độ / Gantt</h3>
+            <div id="ganttBody"></div>
+        </div>
+
+        <div id="calView" class="list-view" style="display:none;">
+            <div class="points-header">
+                <h3 data-i18n="nav_cal">Lịch</h3>
+                <div>
+                    <button class="btn btn-sm btn-secondary" onclick="calMove(-1)">‹</button>
+                    <strong id="calTitle" style="margin:0 8px;"></strong>
+                    <button class="btn btn-sm btn-secondary" onclick="calMove(1)">›</button>
+                </div>
+            </div>
+            <div id="calBody"></div>
+        </div>
+
+        <div id="workloadView" class="list-view" style="display:none;">
+            <div class="my-points-card">
+                <div class="my-points-score" id="streakScore">0</div>
+                <div class="my-points-label" data-i18n="streak_lbl">Chuỗi ngày hiệu quả (streak)</div>
+                <div id="badgeRow" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;"></div>
+            </div>
+            <h3 style="margin: 20px 0 12px;" data-i18n="workload_h">Bản đồ khối lượng</h3>
+            <div id="workloadBody"></div>
+            <div class="admin-only" style="margin-top:16px;">
+                <h3 data-i18n="guest_h">Cổng khách (Guest Portal)</h3>
+                <div style="display:flex;gap:8px;margin-bottom:8px;">
+                    <select id="shareMode" class="filter-select"><option value="view">view-only</option><option value="comment">comment</option></select>
+                    <button class="btn btn-secondary" onclick="createShare()" data-i18n="share_new">+ Tạo link</button>
+                </div>
+                <table class="task-table"><thead><tr><th>URL</th><th>Mode</th><th></th></tr></thead><tbody id="shareBody"></tbody></table>
+                <h3 style="margin:16px 0 8px;">Slack / Teams / GitHub</h3>
+                <div class="form-row">
+                    <div class="form-group"><label>Slack Webhook URL</label><input type="text" id="intSlack" placeholder="https://hooks.slack.com/..."></div>
+                    <div class="form-group"><label>Teams Webhook URL</label><input type="text" id="intTeams" placeholder="https://.../webhook"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>GitHub repo</label><input type="text" id="intGithub" placeholder="owner/repo"></div>
+                    <div class="form-group"><label>Kỹ năng của bạn (skills)</label><input type="text" id="setSkills" placeholder="VD: design, video, code"></div>
+                </div>
+                <button class="btn btn-primary" onclick="saveExtraIntegrations()" data-i18n="save">Lưu</button>
+            </div>
         </div>
 
         <div id="pointsView" class="list-view" style="display:none;">
@@ -436,8 +502,31 @@
                 </div>
             </div>
             <div class="form-group">
-                <label for="taskPoints" data-i18n="pts_done">Điểm khi hoàn thành</label>
+                <label data-i18n="pts_done">Điểm khi hoàn thành</label>
                 <input type="number" id="taskPoints" min="0" value="0" placeholder="0">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label data-i18n="est_lbl">Ước lượng (giờ)</label>
+                    <input type="number" id="taskEstimate" min="0" step="0.5" value="0">
+                </div>
+                <div class="form-group">
+                    <label data-i18n="skills_lbl">Kỹ năng cần (phân cách dấu phẩy)</label>
+                    <input type="text" id="taskSkills" placeholder="VD: design, video">
+                </div>
+            </div>
+            <div class="form-group">
+                <label data-i18n="dep_lbl">Phụ thuộc vào (Task B chỉ làm khi Task A xong)</label>
+                <select id="taskDeps" multiple class="filter-select" style="width:100%;min-height:64px;"></select>
+            </div>
+            <div class="form-group">
+                <label data-i18n="ai_lbl">AI gợi ý checklist</label>
+                <div style="display:flex;gap:8px;">
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="aiSuggest()" data-i18n="ai_btn">✨ AI chia nhỏ công việc</button>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="smartAssign()" data-i18n="smart_btn">🎯 Gợi ý người nhận</button>
+                </div>
+                <div id="aiSuggestBox" style="margin-top:8px;"></div>
+                <div id="smartBox" style="margin-top:8px;"></div>
             </div>
             <div id="taskFormError" class="error-msg"></div>
         </form>
@@ -594,6 +683,49 @@
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeEditFundModal()" data-i18n="cancel">Hủy</button>
             <button class="btn btn-primary" onclick="submitFund()" data-i18n="confirm">Xác nhận</button>
+        </div>
+    </div>
+</div>
+
+<!-- Task Detail Modal -->
+<div id="taskDetailModal" class="modal">
+    <div class="modal-overlay" onclick="closeTaskDetail()"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="taskDetailTitle">Chi tiết</h3>
+            <button class="modal-close" onclick="closeTaskDetail()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="taskDetailMeta" style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;"></div>
+            <h4 data-i18n="sub_h">Nhiệm vụ con</h4>
+            <div id="subList"></div>
+            <div style="display:flex;gap:8px;margin:8px 0;">
+                <input type="text" id="newSubTitle" placeholder="Subtask mới..." style="flex:1;">
+                <button class="btn btn-sm btn-secondary" onclick="addSub()">+</button>
+            </div>
+            <h4 data-i18n="timer_h">Bấm giờ / Pomodoro (25 phút)</h4>
+            <div style="display:flex;gap:8px;align-items:center;margin:8px 0;">
+                <strong id="pomTime" style="font-size:20px;">25:00</strong>
+                <button class="btn btn-sm btn-secondary" id="pomBtn" onclick="togglePom()">▶ Bắt đầu</button>
+                <button class="btn btn-sm btn-secondary" onclick="logTime(1500)">+25p</button>
+                <button class="btn btn-sm btn-secondary" onclick="logTime(300)">+5p</button>
+            </div>
+            <h4 data-i18n="cmt_h">Bình luận (@mention)</h4>
+            <div id="commentList" style="max-height:220px;overflow:auto;margin-bottom:8px;"></div>
+            <div style="display:flex;gap:8px;">
+                <input type="text" id="newComment" placeholder="Viết bình luận... (C)" style="flex:1;">
+                <button class="btn btn-sm btn-primary" onclick="addComment()" data-i18n="send">Gửi</button>
+            </div>
+            <h4 style="margin-top:12px;" data-i18n="attach_h">Đính kèm (link + ghi chú)</h4>
+            <div style="display:flex;gap:8px;">
+                <input type="text" id="attachUrl" placeholder="https://..." style="flex:1;">
+                <input type="text" id="attachNote" placeholder="Ghi chú..." style="flex:1;">
+                <button class="btn btn-sm btn-secondary" onclick="addAttach()">+</button>
+            </div>
+            <div id="attachList" style="margin-top:8px;"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeTaskDetail()" data-i18n="close">Đóng</button>
         </div>
     </div>
 </div>

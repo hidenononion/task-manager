@@ -146,6 +146,50 @@ def init_db():
                 created_at TEXT DEFAULT (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')
             )
         ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS subtasks (
+                id SERIAL PRIMARY KEY,
+                task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+                title TEXT NOT NULL,
+                done INTEGER DEFAULT 0,
+                created_by INTEGER REFERENCES users(id)
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS task_dependencies (
+                task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+                depends_on_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+                PRIMARY KEY (task_id, depends_on_id)
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS comments (
+                id SERIAL PRIMARY KEY,
+                task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id),
+                text TEXT DEFAULT '',
+                created_at TEXT DEFAULT (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS time_logs (
+                id SERIAL PRIMARY KEY,
+                task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id),
+                seconds INTEGER DEFAULT 0,
+                note TEXT DEFAULT 'timer',
+                created_at TEXT DEFAULT (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS shares (
+                id SERIAL PRIMARY KEY,
+                token TEXT UNIQUE NOT NULL,
+                mode TEXT DEFAULT 'view',
+                created_by INTEGER REFERENCES users(id),
+                created_at TEXT DEFAULT (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')
+            )
+        ''')
     else:
         cur.executescript('''
             CREATE TABLE IF NOT EXISTS users (
@@ -238,6 +282,49 @@ def init_db():
                 FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
                 FOREIGN KEY (created_by) REFERENCES users(id)
             );
+            CREATE TABLE IF NOT EXISTS subtasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER,
+                title TEXT NOT NULL,
+                done INTEGER DEFAULT 0,
+                created_by INTEGER,
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            );
+            CREATE TABLE IF NOT EXISTS task_dependencies (
+                task_id INTEGER,
+                depends_on_id INTEGER,
+                PRIMARY KEY (task_id, depends_on_id),
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY (depends_on_id) REFERENCES tasks(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER,
+                user_id INTEGER,
+                text TEXT DEFAULT '',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            );
+            CREATE TABLE IF NOT EXISTS time_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER,
+                user_id INTEGER,
+                seconds INTEGER DEFAULT 0,
+                note TEXT DEFAULT 'timer',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            );
+            CREATE TABLE IF NOT EXISTS shares (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token TEXT UNIQUE NOT NULL,
+                mode TEXT DEFAULT 'view',
+                created_by INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            );
         ''')
 
     admin = cur.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()
@@ -291,6 +378,23 @@ def init_db():
             pass
     try:
         ensure_column(cur, 'tasks', 'deleted_at', 'TEXT DEFAULT NULL')
+    except Exception:
+        pass
+    for col, typ in [('estimate_hours', 'REAL DEFAULT 0'), ('actual_seconds', 'INTEGER DEFAULT 0'),
+                     ('skills', "TEXT DEFAULT ''")]:
+        try:
+            ensure_column(cur, 'tasks' if col != 'skills' else 'users', col, typ)
+        except Exception:
+            pass
+    for col, typ in [('slack_url', "TEXT DEFAULT ''"), ('teams_url', "TEXT DEFAULT ''"),
+                     ('github_repo', "TEXT DEFAULT ''"), ('skills', "TEXT DEFAULT ''")]:
+        try:
+            ensure_column(cur, 'users', col, typ)
+        except Exception:
+            pass
+    try:
+        ensure_column(cur, 'attachments', 'note', "TEXT DEFAULT ''")
+        ensure_column(cur, 'attachments', 'url', "TEXT DEFAULT ''")
     except Exception:
         pass
 
@@ -354,6 +458,53 @@ def totp_verify(secret_b32, code, window=1):
         return False
     except Exception:
         return False
+
+
+def post_json_best_effort(url, payload):
+    try:
+        import json as _json
+        import urllib.request as _url
+        req = _url.Request(url, data=_json.dumps(payload).encode(), headers={'Content-Type': 'application/json'})
+        _url.urlopen(req, timeout=4).read()
+    except Exception:
+        pass
+
+
+def run_automation(conn, event, task):
+    try:
+        cur = conn.cursor()
+        rules = cur.execute("SELECT * FROM automation_rules WHERE enabled = 1").fetchall()
+        me = cur.execute(q("SELECT slack_url, teams_url FROM users WHERE id = %s",
+                           "SELECT slack_url, teams_url FROM users WHERE id = ?"),
+                         (task.get('created_by') or 0,)).fetchone()
+        slack = (dict(me).get('slack_url') or '') if me else ''
+        teams = (dict(me).get('teams_url') or '') if me else ''
+        for r in rules:
+            rr = dict(r)
+            trig = (rr.get('trigger') or '').strip()
+            act = (rr.get('action') or '').strip()
+            if trig and trig != event and trig != '*':
+                continue
+            if act.startswith('priority:'):
+                cur.execute(q("UPDATE tasks SET priority = %s WHERE id = %s",
+                              "UPDATE tasks SET priority = ? WHERE id = ?"),
+                            (act.split(':', 1)[1], task['id']))
+            elif act.startswith('notify:'):
+                msg = {'text': f"[LamKhe] {event}: {task.get('title')} ({act.split(':', 1)[1]})"}
+                if slack:
+                    post_json_best_effort(slack, msg)
+                if teams:
+                    post_json_best_effort(teams, {'text': msg['text']})
+        try:
+            whs = cur.execute(q("SELECT * FROM webhooks WHERE enabled = 1 AND (event = %s OR event = '*')",
+                                "SELECT * FROM webhooks WHERE enabled = 1 AND (event = ? OR event = '*')"),
+                              (event,)).fetchall()
+            for w in whs:
+                post_json_best_effort(dict(w)['url'], {'event': event, 'task': {'id': task.get('id'), 'title': task.get('title')}})
+        except Exception:
+            pass
+    except Exception:
+        pass
 
 
 # ==================== PAGE ROUTES ====================
@@ -538,6 +689,7 @@ def api_update_user(user_id):
 # ==================== SETTINGS API ====================
 
 PROFILE_FIELDS = ['full_name', 'avatar', 'department', 'phone', 'email']
+EXTRA_FIELDS = ['slack_url', 'teams_url', 'github_repo', 'skills']
 ADMIN_USER_FIELDS = ['full_name', 'title', 'department']
 PREF_FIELDS = ['theme', 'language', 'timezone', 'date_format', 'time_format', 'default_view',
                'cal_google', 'cal_outlook', 'store_drive', 'store_onedrive', 'store_dropbox',
@@ -551,7 +703,7 @@ INT_FIELDS = {'cal_google', 'cal_outlook', 'store_drive', 'store_onedrive', 'sto
 def api_profile_update():
     data = request.get_json() or {}
     updates = {}
-    for f in PROFILE_FIELDS + PREF_FIELDS:
+    for f in PROFILE_FIELDS + PREF_FIELDS + EXTRA_FIELDS:
         if f in data:
             v = data[f]
             if f in INT_FIELDS:
@@ -900,6 +1052,26 @@ def serialize_task(conn, task, user_id=None, role=None):
     d['slots_left'] = d['max_assignees'] - d['assignee_count']
     d['is_claimed_by_me'] = any(u['id'] == user_id for u in d['assigned_users']) if user_id else False
     d['points'] = task['points'] or 0
+    try:
+        cur = conn.cursor()
+        subs = cur.execute(q("SELECT id, title, done FROM subtasks WHERE task_id = %s ORDER BY id",
+                             "SELECT id, title, done FROM subtasks WHERE task_id = ? ORDER BY id"),
+                           (task['id'],)).fetchall()
+        d['subtasks'] = [dict(s) for s in subs]
+        deps = cur.execute(q("SELECT depends_on_id FROM task_dependencies WHERE task_id = %s",
+                             "SELECT depends_on_id FROM task_dependencies WHERE task_id = ?"),
+                           (task['id'],)).fetchall()
+        d['depends_on'] = [dict(x)['depends_on_id'] for x in deps]
+        cc = cur.execute(q("SELECT COUNT(*) AS c FROM comments WHERE task_id = %s",
+                           "SELECT COUNT(*) AS c FROM comments WHERE task_id = ?"),
+                         (task['id'],)).fetchone()
+        d['comment_count'] = dict(cc)['c'] if cc else 0
+        d['estimate_hours'] = task['estimate_hours'] if 'estimate_hours' in dict(task) else 0
+        d['actual_seconds'] = task['actual_seconds'] if 'actual_seconds' in dict(task) else 0
+    except Exception:
+        d['subtasks'] = []
+        d['depends_on'] = []
+        d['comment_count'] = 0
     return d
 
 
@@ -944,17 +1116,35 @@ def api_create_task():
     conn = get_db()
     cur = conn.cursor()
     due_date = data.get('due_date') or None
+    try:
+        est = float(data.get('estimate_hours', 0) or 0)
+    except Exception:
+        est = 0
 
     cur.execute(q(
-        "INSERT INTO tasks (title, description, status, priority, due_date, max_assignees, points, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
-        "INSERT INTO tasks (title, description, status, priority, due_date, max_assignees, points, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"),
+        "INSERT INTO tasks (title, description, status, priority, due_date, max_assignees, points, estimate_hours, skills, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+        "INSERT INTO tasks (title, description, status, priority, due_date, max_assignees, points, estimate_hours, skills, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
         (title, data.get('description', '') or '', data.get('status', 'pending'), data.get('priority', 'medium'),
-         due_date, max_assignees, points, session['user_id']))
+         due_date, max_assignees, points, est, (data.get('skills') or ''), session['user_id']))
     task_id = cur.fetchone()['id']
 
     for uid in assigned_ids:
         cur.execute(q("INSERT INTO task_assignments (task_id, user_id) VALUES (%s, %s)",
                       "INSERT INTO task_assignments (task_id, user_id) VALUES (?, ?)"), (task_id, uid))
+
+    for dep in (data.get('depends_on') or []):
+        try:
+            cur.execute(q("INSERT INTO task_dependencies (task_id, depends_on_id) VALUES (%s, %s)",
+                          "INSERT INTO task_dependencies (task_id, depends_on_id) VALUES (?, ?)"),
+                        (task_id, int(dep)))
+        except Exception:
+            pass
+    for st in (data.get('subtasks') or []):
+        ttl = (st.get('title') if isinstance(st, dict) else str(st)).strip() if st else ''
+        if ttl:
+            cur.execute(q("INSERT INTO subtasks (task_id, title, created_by) VALUES (%s, %s, %s)",
+                          "INSERT INTO subtasks (task_id, title, created_by) VALUES (?, ?, ?)"),
+                        (task_id, ttl, session['user_id']))
 
     conn.commit()
     task = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
@@ -979,6 +1169,10 @@ def api_update_task(task_id):
     max_assignees = min(max(int(data.get('max_assignees', t['max_assignees']) or 3), 1), 10)
     points = int(data.get('points', t['points'] or 0) or 0)
     due_date = data.get('due_date') or None
+    try:
+        est = float(data.get('estimate_hours', t.get('estimate_hours', 0) or 0) or 0)
+    except Exception:
+        est = 0
 
     assigned_ids = data.get('assigned_to', [])
     if not isinstance(assigned_ids, list):
@@ -989,16 +1183,28 @@ def api_update_task(task_id):
         return jsonify({'error': f'Tối đa giao cho {max_assignees} người'}), 400
 
     cur.execute(q(
-        "UPDATE tasks SET title=%s, description=%s, status=%s, priority=%s, due_date=%s, max_assignees=%s, points=%s WHERE id=%s",
-        "UPDATE tasks SET title=?, description=?, status=?, priority=?, due_date=?, max_assignees=?, points=? WHERE id=?"),
+        "UPDATE tasks SET title=%s, description=%s, status=%s, priority=%s, due_date=%s, max_assignees=%s, points=%s, estimate_hours=%s, skills=%s WHERE id=%s",
+        "UPDATE tasks SET title=?, description=?, status=?, priority=?, due_date=?, max_assignees=?, points=?, estimate_hours=?, skills=? WHERE id=?"),
         (data.get('title', t['title']), data.get('description', t['description']) or '',
          data.get('status', t['status']), data.get('priority', t['priority']),
-         due_date, max_assignees, points, task_id))
+         due_date, max_assignees, points, est, data.get('skills', t.get('skills', '') or ''), task_id))
 
     cur.execute(q("DELETE FROM task_assignments WHERE task_id = %s", "DELETE FROM task_assignments WHERE task_id = ?"), (task_id,))
     for uid in assigned_ids:
         cur.execute(q("INSERT INTO task_assignments (task_id, user_id) VALUES (%s, %s)",
                       "INSERT INTO task_assignments (task_id, user_id) VALUES (?, ?)"), (task_id, uid))
+
+    if 'depends_on' in data:
+        cur.execute(q("DELETE FROM task_dependencies WHERE task_id = %s", "DELETE FROM task_dependencies WHERE task_id = ?"), (task_id,))
+        for dep in (data.get('depends_on') or []):
+            try:
+                if int(dep) == task_id:
+                    continue
+                cur.execute(q("INSERT INTO task_dependencies (task_id, depends_on_id) VALUES (%s, %s)",
+                              "INSERT INTO task_dependencies (task_id, depends_on_id) VALUES (?, ?)"),
+                            (task_id, int(dep)))
+            except Exception:
+                pass
 
     conn.commit()
     updated = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
@@ -1022,6 +1228,389 @@ def api_delete_task(task_id):
     conn.commit()
     conn.close()
     return jsonify({'message': 'Đã chuyển vào thùng rác'})
+
+
+# ==================== AI & SMART ASSIGN ====================
+
+def ai_split_goal(goal):
+    goal = (goal or '').strip()
+    if not goal:
+        return []
+    parts = [p.strip(' -•\t') for p in goal.replace(';', '\n').replace('。', '\n').split('\n')]
+    parts = [p for p in parts if len(p) > 2]
+    if len(parts) >= 2:
+        return [{'title': p[:120]} for p in parts[:10]]
+    words = goal.split()
+    out = []
+    verbs = ['Chuẩn bị', 'Lên kế hoạch', 'Triển khai', 'Kiểm tra', 'Tổng hợp báo cáo']
+    base = ' '.join(words[:12])
+    for i, v in enumerate(verbs):
+        out.append({'title': f"{v}: {base[:80]}"})
+        if i >= 3:
+            break
+    return out
+
+
+@app.route('/api/ai/suggest', methods=['POST'])
+@login_required
+def api_ai_suggest():
+    data = request.get_json() or {}
+    goal = data.get('goal', '') or data.get('title', '')
+    return jsonify({'suggestions': ai_split_goal(goal)})
+
+
+@app.route('/api/smart-assign')
+@login_required
+def api_smart_assign():
+    need_skills = (request.args.get('skills') or '').lower()
+    conn = get_db()
+    cur = conn.cursor()
+    users = cur.execute(q("SELECT id, username, score, skills FROM users WHERE role = 'user'",
+                          "SELECT id, username, score, skills FROM users WHERE role = 'user'")).fetchall()
+    scored = []
+    for u in users:
+        uu = dict(u)
+        act = cur.execute(q("SELECT COUNT(*) AS c FROM task_assignments ta JOIN tasks t ON ta.task_id = t.id WHERE ta.user_id = %s AND t.status != 'done' AND t.deleted_at IS NULL",
+                            "SELECT COUNT(*) AS c FROM task_assignments ta JOIN tasks t ON ta.task_id = t.id WHERE ta.user_id = %s AND t.status != 'done' AND t.deleted_at IS NULL"),
+                          (uu['id'],)).fetchone()
+        workload = dict(act)['c'] if act else 0
+        skill_hit = 0
+        if need_skills:
+            usk = (uu.get('skills') or '').lower()
+            skill_hit = sum(1 for w in need_skills.replace(',', ' ').split() if w and w in usk)
+        done_n = cur.execute(q("SELECT COUNT(*) AS c FROM points_log WHERE user_id = %s", "SELECT COUNT(*) AS c FROM points_log WHERE user_id = %s"),
+                             (uu['id'],)).fetchone()
+        done_n = dict(done_n)['c'] if done_n else 0
+        score = skill_hit * 10 - workload * 3 + min(done_n, 10) * 0.2
+        scored.append({'id': uu['id'], 'username': uu['username'], 'workload': workload,
+                       'skill_match': skill_hit, 'score': round(score, 1)})
+    scored.sort(key=lambda x: -x['score'])
+    conn.close()
+    return jsonify(scored[:5])
+
+
+# ==================== SUBTASKS / DEPENDENCIES / COMMENTS / TIME ====================
+
+@app.route('/api/tasks/<int:task_id>/subtasks', methods=['GET', 'POST'])
+@login_required
+def api_subtasks(task_id):
+    conn = get_db()
+    cur = conn.cursor()
+    if request.method == 'GET':
+        rows = cur.execute(q("SELECT * FROM subtasks WHERE task_id = %s ORDER BY id",
+                             "SELECT * FROM subtasks WHERE task_id = ? ORDER BY id"), (task_id,)).fetchall()
+        conn.close()
+        return jsonify([dict(r) for r in rows])
+    data = request.get_json() or {}
+    title = (data.get('title') or '').strip()
+    if not title:
+        conn.close()
+        return jsonify({'error': 'Thiếu tiêu đề'}), 400
+    cur.execute(q("INSERT INTO subtasks (task_id, title, created_by) VALUES (%s, %s, %s)",
+                  "INSERT INTO subtasks (task_id, title, created_by) VALUES (?, ?, ?)"),
+                (task_id, title, session['user_id']))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã thêm subtask'}), 201
+
+
+@app.route('/api/subtasks/<int:sid>', methods=['PUT', 'DELETE'])
+@login_required
+def api_subtask_one(sid):
+    conn = get_db()
+    cur = conn.cursor()
+    if request.method == 'DELETE':
+        cur.execute(q("DELETE FROM subtasks WHERE id = %s", "DELETE FROM subtasks WHERE id = ?"), (sid,))
+        conn.commit()
+        conn.close()
+        return jsonify({'message': 'Đã xóa'})
+    data = request.get_json() or {}
+    if 'done' in data:
+        cur.execute(q("UPDATE subtasks SET done = %s WHERE id = %s", "UPDATE subtasks SET done = ? WHERE id = ?"),
+                    (1 if data['done'] else 0, sid))
+    if 'title' in data and data['title']:
+        cur.execute(q("UPDATE subtasks SET title = %s WHERE id = %s", "UPDATE subtasks SET title = ? WHERE id = ?"),
+                    (data['title'], sid))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã cập nhật'})
+
+
+@app.route('/api/tasks/<int:task_id>/dependencies', methods=['GET', 'POST', 'DELETE'])
+@login_required
+def api_dependencies(task_id):
+    conn = get_db()
+    cur = conn.cursor()
+    if request.method == 'GET':
+        rows = cur.execute(q("SELECT d.depends_on_id AS id, t.title, t.status FROM task_dependencies d JOIN tasks t ON t.id = d.depends_on_id WHERE d.task_id = %s",
+                             "SELECT d.depends_on_id AS id, t.title, t.status FROM task_dependencies d JOIN tasks t ON t.id = d.depends_on_id WHERE d.task_id = ?"),
+                           (task_id,)).fetchall()
+        conn.close()
+        return jsonify([dict(r) for r in rows])
+    data = request.get_json() or {}
+    dep = int(data.get('depends_on_id', 0) or 0)
+    if request.method == 'DELETE':
+        cur.execute(q("DELETE FROM task_dependencies WHERE task_id = %s AND depends_on_id = %s",
+                      "DELETE FROM task_dependencies WHERE task_id = ? AND depends_on_id = ?"), (task_id, dep))
+        conn.commit()
+        conn.close()
+        return jsonify({'message': 'Đã gỡ phụ thuộc'})
+    if not dep or dep == task_id:
+        conn.close()
+        return jsonify({'error': 'Phụ thuộc không hợp lệ'}), 400
+    try:
+        cur.execute(q("INSERT INTO task_dependencies (task_id, depends_on_id) VALUES (%s, %s)",
+                      "INSERT INTO task_dependencies (task_id, depends_on_id) VALUES (?, ?)"), (task_id, dep))
+        conn.commit()
+    except Exception:
+        pass
+    conn.close()
+    return jsonify({'message': 'Đã thêm phụ thuộc'}), 201
+
+
+@app.route('/api/tasks/<int:task_id>/comments', methods=['GET', 'POST'])
+@login_required
+def api_comments(task_id):
+    conn = get_db()
+    cur = conn.cursor()
+    if request.method == 'GET':
+        rows = cur.execute(q("SELECT c.*, u.username FROM comments c LEFT JOIN users u ON c.user_id = u.id WHERE c.task_id = %s ORDER BY c.created_at",
+                             "SELECT c.*, u.username FROM comments c LEFT JOIN users u ON c.user_id = u.id WHERE c.task_id = ? ORDER BY c.created_at"),
+                           (task_id,)).fetchall()
+        conn.close()
+        return jsonify([dict(r) for r in rows])
+    data = request.get_json() or {}
+    text = (data.get('text') or '').strip()
+    if not text:
+        conn.close()
+        return jsonify({'error': 'Thiếu nội dung'}), 400
+    cur.execute(q("INSERT INTO comments (task_id, user_id, text) VALUES (%s, %s, %s)",
+                  "INSERT INTO comments (task_id, user_id, text) VALUES (?, ?, ?)"),
+                (task_id, session['user_id'], text[:2000]))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã bình luận'}), 201
+
+
+@app.route('/api/tasks/<int:task_id>/time', methods=['POST'])
+@login_required
+def api_time_log(task_id):
+    data = request.get_json() or {}
+    try:
+        secs = max(0, int(data.get('seconds', 0) or 0))
+    except Exception:
+        secs = 0
+    if secs <= 0:
+        return jsonify({'error': 'Số giây không hợp lệ'}), 400
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(q("INSERT INTO time_logs (task_id, user_id, seconds, note) VALUES (%s, %s, %s, %s)",
+                  "INSERT INTO time_logs (task_id, user_id, seconds, note) VALUES (?, ?, ?, ?)"),
+                (task_id, session['user_id'], secs, (data.get('note') or 'timer')[:50]))
+    cur.execute(q("UPDATE tasks SET actual_seconds = COALESCE(actual_seconds,0) + %s WHERE id = %s",
+                  "UPDATE tasks SET actual_seconds = COALESCE(actual_seconds,0) + ? WHERE id = ?"), (secs, task_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': f'Đã ghi {secs}s'}), 201
+
+
+@app.route('/api/tasks/bulk', methods=['POST'])
+@login_required
+def api_tasks_bulk():
+    data = request.get_json() or {}
+    ids = [int(x) for x in (data.get('ids') or []) if str(x).isdigit()]
+    if not ids:
+        return jsonify({'error': 'Chưa chọn task'}), 400
+    ph = ','.join(['%s'] * len(ids)) if is_pg() else ','.join(['?'] * len(ids))
+    conn = get_db()
+    cur = conn.cursor()
+    if session.get('role') != 'bithu':
+        rows = cur.execute(f"SELECT task_id FROM task_assignments WHERE user_id = %s AND task_id IN ({ph})" if is_pg()
+                           else f"SELECT task_id FROM task_assignments WHERE user_id = ? AND task_id IN ({ph})",
+                           ([session['user_id']] + ids)).fetchall()
+        ids = [dict(r)['task_id'] for r in rows]
+        if not ids:
+            conn.close()
+            return jsonify({'error': 'Không có quyền'}), 403
+        ph = ','.join(['%s'] * len(ids)) if is_pg() else ','.join(['?'] * len(ids))
+    if data.get('status') in ('pending', 'in_progress', 'done'):
+        cur.execute(f"UPDATE tasks SET status = %s WHERE id IN ({ph})" if is_pg()
+                    else f"UPDATE tasks SET status = ? WHERE id IN ({ph})",
+                    ([data['status']] + ids))
+    if data.get('assign_to') is not None:
+        try:
+            uid = int(data['assign_to'])
+            for tid in ids:
+                try:
+                    cur.execute(q("INSERT INTO task_assignments (task_id, user_id) VALUES (%s, %s)",
+                                  "INSERT INTO task_assignments (task_id, user_id) VALUES (?, ?)"), (tid, uid))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    if data.get('claim_me'):
+        for tid in ids:
+            try:
+                cur.execute(q("INSERT INTO task_assignments (task_id, user_id) VALUES (%s, %s)",
+                              "INSERT INTO task_assignments (task_id, user_id) VALUES (?, ?)"), (tid, session['user_id']))
+            except Exception:
+                pass
+    conn.commit()
+    conn.close()
+    return jsonify({'message': f'Đã cập nhật {len(ids)} task'})
+
+
+# ==================== WORKLOAD / GAMIFICATION ====================
+
+@app.route('/api/workload')
+@login_required
+def api_workload():
+    conn = get_db()
+    cur = conn.cursor()
+    users = cur.execute(q("SELECT id, username, full_name FROM users WHERE role = 'user'",
+                          "SELECT id, username, full_name FROM users WHERE role = 'user'")).fetchall()
+    out = []
+    for u in users:
+        uu = dict(u)
+        act = cur.execute(q("SELECT COUNT(*) AS c FROM task_assignments ta JOIN tasks t ON ta.task_id = t.id WHERE ta.user_id = %s AND t.status != 'done' AND t.deleted_at IS NULL",
+                            "SELECT COUNT(*) AS c FROM task_assignments ta JOIN tasks t ON ta.task_id = t.id WHERE ta.user_id = %s AND t.status != 'done' AND t.deleted_at IS NULL"),
+                          (uu['id'],)).fetchone()
+        over = cur.execute(q("SELECT COUNT(*) AS c FROM task_assignments ta JOIN tasks t ON ta.task_id = t.id WHERE ta.user_id = %s AND t.status != 'done' AND t.deleted_at IS NULL AND t.due_date IS NOT NULL AND t.due_date < CURRENT_DATE",
+                             "SELECT COUNT(*) AS c FROM task_assignments ta JOIN tasks t ON ta.task_id = t.id WHERE ta.user_id = %s AND t.status != 'done' AND t.deleted_at IS NULL AND t.due_date IS NOT NULL AND date(t.due_date) < date('now')"),
+                           (uu['id'],)).fetchone()
+        done = cur.execute(q("SELECT COUNT(*) AS c FROM points_log WHERE user_id = %s", "SELECT COUNT(*) AS c FROM points_log WHERE user_id = %s"),
+                           (uu['id'],)).fetchone()
+        out.append({'id': uu['id'], 'username': uu['username'], 'full_name': uu.get('full_name') or '',
+                    'active': dict(act)['c'] if act else 0, 'overdue': dict(over)['c'] if over else 0,
+                    'done': dict(done)['c'] if done else 0})
+    conn.close()
+    return jsonify(out)
+
+
+@app.route('/api/gamification')
+@login_required
+def api_gamification():
+    conn = get_db()
+    cur = conn.cursor()
+    uid = session['user_id']
+    rows = cur.execute(q("SELECT DATE(created_at) AS d FROM points_log WHERE user_id = %s AND points > 0 ORDER BY created_at DESC LIMIT 60",
+                         "SELECT date(created_at) AS d FROM points_log WHERE user_id = %s AND points > 0 ORDER BY created_at DESC LIMIT 60"),
+                       (uid,)).fetchall()
+    days = []
+    for r in rows:
+        d = dict(r)['d']
+        if d and (not days or days[-1] != str(d)):
+            days.append(str(d))
+    streak = 0
+    try:
+        from datetime import date, timedelta
+        today = date.today()
+        s = set(days)
+        cursor = today if str(today) in s else today - timedelta(days=1)
+        while str(cursor) in s:
+            streak += 1
+            cursor -= timedelta(days=1)
+    except Exception:
+        pass
+    done_n = cur.execute(q("SELECT COUNT(*) AS c FROM points_log WHERE user_id = %s AND points > 0",
+                           "SELECT COUNT(*) AS c FROM points_log WHERE user_id = %s AND points > 0"), (uid,)).fetchone()
+    done_n = dict(done_n)['c'] if done_n else 0
+    badges = []
+    if done_n >= 1:
+        badges.append({'icon': '🌱', 'name': 'Khởi đầu'})
+    if done_n >= 5:
+        badges.append({'icon': '🔥', 'name': 'Năng nổ (5 task)'})
+    if done_n >= 20:
+        badges.append({'icon': '⭐', 'name': 'Ngôi sao (20 task)'})
+    if streak >= 3:
+        badges.append({'icon': '📆', 'name': f'Streak {streak} ngày'})
+    if streak >= 7:
+        badges.append({'icon': '🏆', 'name': 'Bền bỉ 7 ngày'})
+    conn.close()
+    return jsonify({'streak': streak, 'done': done_n, 'badges': badges})
+
+
+# ==================== GUEST SHARE ====================
+
+@app.route('/api/share', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def api_share():
+    conn = get_db()
+    cur = conn.cursor()
+    if request.method == 'GET':
+        rows = cur.execute("SELECT * FROM shares ORDER BY id DESC").fetchall()
+        conn.close()
+        return jsonify([dict(r) for r in rows])
+    data = request.get_json() or {}
+    token = secrets.token_urlsafe(10)
+    cur.execute(q("INSERT INTO shares (token, mode, created_by) VALUES (%s, %s, %s)",
+                  "INSERT INTO shares (token, mode, created_by) VALUES (?, ?, ?)"),
+                (token, data.get('mode', 'view'), session['user_id']))
+    conn.commit()
+    conn.close()
+    return jsonify({'token': token, 'url': f'/share/{token}'}), 201
+
+
+@app.route('/api/share/<token>', methods=['DELETE'])
+@login_required
+@admin_required
+def api_share_delete(token):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(q("DELETE FROM shares WHERE token = %s", "DELETE FROM shares WHERE token = ?"), (token,))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã xóa link'})
+
+
+@app.route('/share/<token>')
+def share_page(token):
+    conn = get_db()
+    cur = conn.cursor()
+    sh = cur.execute(q("SELECT * FROM shares WHERE token = %s", "SELECT * FROM shares WHERE token = ?"), (token,)).fetchone()
+    if not sh:
+        conn.close()
+        return 'Link không tồn tại', 404
+    tasks = cur.execute("SELECT id, title, description, status, priority, due_date FROM tasks WHERE deleted_at IS NULL ORDER BY created_at DESC").fetchall()
+    conn.close()
+    rows = ''.join([f"<tr><td>{dict(t).get('title','')}</td><td>{dict(t).get('status','')}</td><td>{dict(t).get('due_date') or ''}</td></tr>" for t in tasks])
+    mode = dict(sh).get('mode', 'view')
+    comment_box = ''
+    if mode == 'comment':
+        comment_box = '<p style="color:#888">Link này cho phép bình luận (liên hệ Bí thư để gửi nhận xét).</p>'
+    return f"""<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tiến độ - Đoàn TN thôn Lam Khê</title>
+<style>body{{font-family:system-ui;background:#0a0a0f;color:#eee;margin:0;padding:24px}}table{{width:100%;border-collapse:collapse}}td,th{{border:1px solid #333;padding:8px;text-align:left}}th{{background:#1a1a24}}</style></head>
+<body><h2>Tiến độ công việc - Đoàn TN thôn Lam Khê</h2>{comment_box}<table><tr><th>Nhiệm vụ</th><th>Trạng thái</th><th>Hạn</th></tr>{rows}</table></body></html>"""
+
+
+@app.route('/api/tasks/<int:task_id>/attachments', methods=['GET', 'POST'])
+@login_required
+def api_attachments(task_id):
+    conn = get_db()
+    cur = conn.cursor()
+    if request.method == 'GET':
+        try:
+            rows = cur.execute(q("SELECT * FROM attachments WHERE task_id = %s ORDER BY id",
+                                 "SELECT * FROM attachments WHERE task_id = ? ORDER BY id"), (task_id,)).fetchall()
+            conn.close()
+            return jsonify([dict(r) for r in rows])
+        except Exception:
+            conn.close()
+            return jsonify([])
+    data = request.get_json() or {}
+    url = (data.get('url') or '').strip()
+    note = (data.get('note') or '')[:500]
+    name = (data.get('filename') or url or 'link')[:200]
+    if not url:
+        conn.close()
+        return jsonify({'error': 'Thiếu link'}), 400
+    cur.execute(q("INSERT INTO attachments (task_id, filename, url, note, size, created_by) VALUES (%s, %s, %s, %s, %s, %s)",
+                  "INSERT INTO attachments (task_id, filename, url, note, size, created_by) VALUES (?, ?, ?, ?, ?, ?)"),
+                (task_id, name, url, note, 0, session['user_id']))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã đính kèm'}), 201
 
 
 # ==================== CLAIM / UNCLAIM ====================
@@ -1126,6 +1715,22 @@ def api_update_status(task_id):
             return jsonify({'error': 'Không có quyền cập nhật task này'}), 403
 
     old_status = task['status']
+    if new_status == 'done' and old_status != 'done':
+        try:
+            deps = cur.execute(q("SELECT depends_on_id FROM task_dependencies WHERE task_id = %s",
+                                 "SELECT depends_on_id FROM task_dependencies WHERE task_id = ?"),
+                               (task_id,)).fetchall()
+            dep_ids = [dict(x)['depends_on_id'] for x in deps]
+            if dep_ids:
+                ph = ','.join(['%s'] * len(dep_ids)) if is_pg() else ','.join(['?'] * len(dep_ids))
+                open_deps = cur.execute(f"SELECT COUNT(*) AS c FROM tasks WHERE id IN ({ph}) AND status != 'done'",
+                                        dep_ids).fetchone()
+                if open_deps and dict(open_deps)['c'] > 0:
+                    conn.close()
+                    return jsonify({'error': f"Task phụ thuộc chưa xong ({dict(open_deps)['c']} task)"}), 400
+        except Exception as e:
+            if 'Task phụ thuộc' in str(e):
+                raise e
     cur.execute(q("UPDATE tasks SET status = %s WHERE id = %s", "UPDATE tasks SET status = ? WHERE id = ?"), (new_status, task_id))
 
     if new_status == 'done' and old_status != 'done' and task['points'] and task['points'] > 0:
@@ -1165,6 +1770,9 @@ def api_update_status(task_id):
                             (task_id, session['user_id']))
         except Exception:
             pass
+        run_automation(conn, f"status:{new_status}", dict(task))
+    elif new_status != old_status:
+        run_automation(conn, f"status:{new_status}", dict(task))
 
     conn.commit()
     updated = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()

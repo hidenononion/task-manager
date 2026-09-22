@@ -80,15 +80,18 @@ function setupNav() {
             item.classList.add('active');
             currentView = item.dataset.view;
 
-            const views = ['kanbanView', 'listView', 'pointsView', 'myPointsView', 'financeView', 'usersView', 'settingsView'];
+            const views = ['kanbanView', 'listView', 'ganttView', 'calView', 'workloadView', 'pointsView', 'myPointsView', 'financeView', 'usersView', 'settingsView'];
             views.forEach(v => { const el = document.getElementById(v); if (el) el.style.display = 'none'; });
 
-            const titles = { kanban: t('title_kanban'), list: t('title_list'), points: t('title_points'), 'my-points': t('title_mine'), finance: t('title_finance'), users: t('title_users'), settings: t('title_settings') };
+            const titles = { kanban: t('title_kanban'), list: t('title_list'), gantt: t('gantt_h'), calendar: t('nav_cal'), workload: t('nav_workload'), points: t('title_points'), 'my-points': t('title_mine'), finance: t('title_finance'), users: t('title_users'), settings: t('title_settings') };
             document.getElementById('viewTitle').textContent = titles[currentView] || '';
             document.getElementById('statsGrid').style.display = ['kanban', 'list'].includes(currentView) ? '' : 'none';
 
             if (currentView === 'kanban') document.getElementById('kanbanView').style.display = 'flex';
             else if (currentView === 'list') { document.getElementById('listView').style.display = 'block'; renderTasks(); }
+            else if (currentView === 'gantt') { document.getElementById('ganttView').style.display = 'block'; renderGantt(); }
+            else if (currentView === 'calendar') { document.getElementById('calView').style.display = 'block'; renderCalendar(); }
+            else if (currentView === 'workload') { document.getElementById('workloadView').style.display = 'block'; loadWorkload(); loadGamification(); loadShares(); }
             else if (currentView === 'points') { document.getElementById('pointsView').style.display = 'block'; loadPoints(); }
             else if (currentView === 'my-points') { document.getElementById('myPointsView').style.display = 'block'; loadMyPoints(); }
             else if (currentView === 'finance') { document.getElementById('financeView').style.display = 'block'; loadFinance(); }
@@ -222,7 +225,7 @@ function createTaskCard(task) {
 
     return `<div class="task-card" data-id="${task.id}">
         <div class="task-card-header">
-            <div class="task-card-title">${escapeHtml(task.title)}</div>
+            <div class="task-card-title" onclick="openTaskDetail(${task.id})" style="cursor:pointer;">${escapeHtml(task.title)}</div>
             <div class="task-card-actions">${adminActions}</div>
         </div>
         ${task.description ? `<div class="task-card-desc">${escapeHtml(task.description)}</div>` : ''}
@@ -232,6 +235,9 @@ function createTaskCard(task) {
                 ${assigneeTags || `<span class="assignee-tag" style="color:var(--text-muted)">${t('no_one')}</span>`}
                 ${slotInfo} ${pointsTag}
                 ${task.due_date ? `<span class="due-date ${isOverdue ? 'overdue' : ''}">${formatDate(task.due_date)}</span>` : ''}
+                ${(task.subtasks || []).length ? `<span class="slot-info">✓${task.subtasks.filter(s => s.done).length}/${task.subtasks.length}</span>` : ''}
+                ${(task.depends_on || []).length ? `<span class="slot-info">⛓${task.depends_on.length}</span>` : ''}
+                ${task.comment_count ? `<span class="slot-info" onclick="openTaskDetail(${task.id})" style="cursor:pointer;">💬${task.comment_count}</span>` : ''}
             </div>
             <div class="task-card-actions-row">${statusSelect} ${claimBtn}</div>
         </div>
@@ -250,7 +256,7 @@ function renderList(tasks) {
         const assigneeNames = task.assigned_users.map(u => escapeHtml(u.username)).join(', ');
         let statusCell = (isClaimed || isAdmin) ? `<select class="status-select" onchange="changeStatus(${task.id}, this.value)"><option value="pending" ${task.status === 'pending' ? 'selected' : ''}>${getStatusLabel('pending')}</option><option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>${getStatusLabel('in_progress')}</option><option value="done" ${task.status === 'done' ? 'selected' : ''}>${getStatusLabel('done')}</option></select>` : `<span class="status-label">${getStatusLabel(task.status)}</span>`;
         let claimBtn = canClaim ? `<button class="btn btn-claim btn-sm" onclick="claimTask(${task.id})">${t('claim_sm')}</button>` : isClaimed && !isAdmin ? `<button class="btn btn-unclaim btn-sm" onclick="unclaimTask(${task.id})">${t('unclaim')}</button>` : '';
-        return `<tr><td><div class="task-title-cell">${escapeHtml(task.title)}${task.description ? `<small>${escapeHtml(task.description.substring(0, 60))}${task.description.length > 60 ? '...' : ''}</small>` : ''}</div></td><td>${statusCell}</td><td><span class="priority-tag ${task.priority}">${getPriorityLabel(task.priority)}</span></td><td>${assigneeNames || `<span style="color:var(--text-muted)">${t('no_one')}</span>`}</td><td><span class="slot-info">${task.assignee_count}/${task.max_assignees}</span></td><td>${task.points > 0 ? `<span class="priority-tag low">+${task.points}</span>` : '-'}</td><td>${task.due_date ? `<span class="due-date ${isOverdue ? 'overdue' : ''}">${formatDate(task.due_date)}</span>` : '-'}</td><td>${adminActions}${claimBtn}</td></tr>`;
+        return `<tr><td>${bulkMode ? `<input type="checkbox" class="bulk-check" value="${task.id}" onchange="toggleBulkOne(this)"> ` : ''}<div class="task-title-cell" onclick="openTaskDetail(${task.id})" style="cursor:pointer;display:inline-block;">${escapeHtml(task.title)}${task.description ? `<small>${escapeHtml(task.description.substring(0, 60))}${task.description.length > 60 ? '...' : ''}</small>` : ''}</div></td><td>${statusCell}</td><td><span class="priority-tag ${task.priority}">${getPriorityLabel(task.priority)}</span></td><td>${assigneeNames || `<span style="color:var(--text-muted)">${t('no_one')}</span>`}</td><td><span class="slot-info">${task.assignee_count}/${task.max_assignees}</span></td><td>${task.points > 0 ? `<span class="priority-tag low">+${task.points}</span>` : '-'}</td><td>${task.due_date ? `<span class="due-date ${isOverdue ? 'overdue' : ''}">${formatDate(task.due_date)}</span>` : '-'}</td><td>${adminActions}${claimBtn}</td></tr>`;
     }).join('');
 }
 
@@ -418,7 +424,10 @@ function openTaskModal(taskId = null) {
         document.getElementById('taskMaxAssignees').value = task.max_assignees;
         document.getElementById('taskDueDate').value = task.due_date || '';
         document.getElementById('taskPoints').value = task.points || 0;
+        document.getElementById('taskEstimate').value = task.estimate_hours || 0;
+        document.getElementById('taskSkills').value = task.skills || '';
         setSelectedAssignees(task.assigned_users.map(u => u.id));
+        populateDeps(taskId, task.depends_on || []);
     } else {
         document.getElementById('modalTitle').textContent = t('new_task');
         document.getElementById('taskForm').reset();
@@ -427,8 +436,23 @@ function openTaskModal(taskId = null) {
         document.getElementById('taskMaxAssignees').value = 3;
         document.getElementById('taskPoints').value = 0;
         setSelectedAssignees([]);
+        populateDeps(null, []);
     }
+    document.getElementById('aiSuggestBox').innerHTML = '';
+    document.getElementById('smartBox').innerHTML = '';
     document.getElementById('taskModal').classList.add('active');
+}
+
+function populateDeps(excludeId, selected) {
+    const sel = document.getElementById('taskDeps');
+    if (!sel) return;
+    sel.innerHTML = allTasks.filter(x => x.id !== excludeId).map(x =>
+        `<option value="${x.id}" ${selected.includes(x.id) ? 'selected' : ''}>#${x.id} ${escapeHtml(x.title)} (${getStatusLabel(x.status)})</option>`).join('');
+}
+
+function getSelectedDeps() {
+    const sel = document.getElementById('taskDeps');
+    return sel ? Array.from(sel.selectedOptions).map(o => parseInt(o.value)) : [];
 }
 
 function closeTaskModal() { document.getElementById('taskModal').classList.remove('active'); }
@@ -450,7 +474,10 @@ async function saveTask() {
         status: document.getElementById('taskStatus').value, priority: document.getElementById('taskPriority').value,
         max_assignees: maxAssignees, assigned_to: assignedTo,
         due_date: document.getElementById('taskDueDate').value || null,
-        points: parseInt(document.getElementById('taskPoints').value) || 0
+        points: parseInt(document.getElementById('taskPoints').value) || 0,
+        estimate_hours: parseFloat(document.getElementById('taskEstimate').value) || 0,
+        skills: document.getElementById('taskSkills').value.trim(),
+        depends_on: getSelectedDeps()
     };
     try {
         const url = taskId ? `/api/tasks/${taskId}` : '/api/tasks';
@@ -588,7 +615,15 @@ vi: {
     add_fin_trans: 'Thêm giao dịch', trans_type: 'Loại giao dịch', income: 'Thu', expense: 'Chi (tự trừ quỹ)',
     amount: 'Số tiền', desc: 'Mô tả', category: 'Loại chi / Nhóm',
     update_fund_h: 'Cập nhật quỹ', fund_balance: 'Số dư quỹ hiện tại', op: 'Thao tác',
-    op_set: 'Đặt lại số dư', op_add: 'Cộng thêm', op_sub: 'Trừ bớt'
+    op_set: 'Đặt lại số dư', op_add: 'Cộng thêm', op_sub: 'Trừ bớt',
+    nav_gantt: 'Tiến độ', nav_cal: 'Lịch', nav_workload: 'Khối lượng',
+    gantt_h: 'Tiến độ / Gantt', workload_h: 'Bản đồ khối lượng', streak_lbl: 'Chuỗi ngày hiệu quả (streak)',
+    guest_h: 'Cổng khách (Guest Portal)', share_new: '+ Tạo link',
+    est_lbl: 'Ước lượng (giờ)', skills_lbl: 'Kỹ năng cần (phân cách dấu phẩy)',
+    dep_lbl: 'Phụ thuộc vào (Task B chỉ làm khi Task A xong)',
+    ai_lbl: 'AI gợi ý checklist', ai_btn: '✨ AI chia nhỏ công việc', smart_btn: '🎯 Gợi ý người nhận',
+    sub_h: 'Nhiệm vụ con', timer_h: 'Bấm giờ / Pomodoro (25 phút)', cmt_h: 'Bình luận (@mention)',
+    attach_h: 'Đính kèm (link + ghi chú)', send: 'Gửi'
 },
 en: {
     nav_kanban: 'Kanban Board', nav_list: 'List', nav_points: 'Points overview', nav_finance: 'Finance',
@@ -634,7 +669,15 @@ en: {
     add_fin_trans: 'Add transaction', trans_type: 'Transaction type', income: 'Income', expense: 'Expense (from fund)',
     amount: 'Amount', desc: 'Description', category: 'Category',
     update_fund_h: 'Update fund', fund_balance: 'Current balance', op: 'Operation',
-    op_set: 'Reset balance', op_add: 'Add', op_sub: 'Subtract'
+    op_set: 'Reset balance', op_add: 'Add', op_sub: 'Subtract',
+    nav_gantt: 'Timeline', nav_cal: 'Calendar', nav_workload: 'Workload',
+    gantt_h: 'Timeline / Gantt', workload_h: 'Workload map', streak_lbl: 'Effective-day streak',
+    guest_h: 'Guest Portal', share_new: '+ New link',
+    est_lbl: 'Estimate (hours)', skills_lbl: 'Required skills (comma separated)',
+    dep_lbl: 'Depends on (Task B only when Task A is done)',
+    ai_lbl: 'AI checklist suggestions', ai_btn: '✨ AI split task', smart_btn: '🎯 Suggest assignee',
+    sub_h: 'Subtasks', timer_h: 'Timer / Pomodoro (25 min)', cmt_h: 'Comments (@mention)',
+    attach_h: 'Attachments (link + note)', send: 'Send'
 }
 };
 function curLang() { return localStorage.getItem('lang') || (currentUser && currentUser.language) || 'vi'; }
@@ -695,7 +738,7 @@ async function submitFund() {
     } catch (err) { errorEl.textContent = 'Lỗi kết nối'; }
 }
 
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeTaskModal(); closeDeleteModal(); closeAddPointsModal(); closeAddFinanceModal(); closePointsDetailModal(); closeEditFundModal(); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeTaskModal(); closeDeleteModal(); closeAddPointsModal(); closeAddFinanceModal(); closePointsDetailModal(); closeEditFundModal(); closeTaskDetail(); } });
 
 // ==================== SETTINGS ====================
 function switchSettingsTab(tab) {
@@ -723,6 +766,9 @@ function fillSettings() {
     chk('intDropbox', currentUser.store_dropbox);
     chk('autoUnfollow', currentUser.auto_done_unfollow); chk('autoWarn', currentUser.auto_overdue_warn);
     const tok = document.getElementById('apiToken'); if (tok) tok.value = currentUser.api_token || '';
+    const set2 = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+    set2('intSlack', currentUser.slack_url); set2('intTeams', currentUser.teams_url);
+    set2('intGithub', currentUser.github_repo); set2('setSkills', currentUser.skills);
     const st = document.getElementById('twofaStatus'); if (st) st.textContent = currentUser.twofa_enabled ? t('on') : t('off');
     if (currentUser.avatar) document.getElementById('userAvatar').textContent = (currentUser.full_name || currentUser.username)[0].toUpperCase();
     localStorage.setItem('date_format', currentUser.date_format || 'DD/MM/YYYY');
@@ -781,8 +827,8 @@ function applyLang(lang) {
     if (lang) localStorage.setItem('lang', lang);
     document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
     document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
-    const icons = { kanban: '&#9638;', list: '&#9776;', points: '&#11088;', finance: '&#128176;', users: '&#128101;', 'my-points': '&#11088;', settings: '&#9881;' };
-    const navKeys = { kanban: 'nav_kanban', list: 'nav_list', points: 'nav_points', finance: 'nav_finance', users: 'nav_users', 'my-points': 'nav_mine', settings: 'nav_settings' };
+    const icons = { kanban: '&#9638;', list: '&#9776;', gantt: '&#128207;', calendar: '&#128197;', workload: '&#128202;', points: '&#11088;', finance: '&#128176;', users: '&#128101;', 'my-points': '&#11088;', settings: '&#9881;' };
+    const navKeys = { kanban: 'nav_kanban', list: 'nav_list', gantt: 'nav_gantt', calendar: 'nav_cal', workload: 'nav_workload', points: 'nav_points', finance: 'nav_finance', users: 'nav_users', 'my-points': 'nav_mine', settings: 'nav_settings' };
     document.querySelectorAll('.nav-item').forEach(n => {
         const k = navKeys[n.dataset.view];
         if (k) n.innerHTML = `<span class="nav-icon">${icons[n.dataset.view] || ''}</span> ${t(k)}`;
@@ -948,3 +994,284 @@ async function loadStorage() {
         if (el) el.textContent = `${d.files} tệp đính kèm • ${(d.bytes / 1024).toFixed(1)} KB • ${d.tasks} task đang hoạt động`;
     } catch (e) {}
 }
+
+// ==================== GANTT ====================
+function renderGantt() {
+    const body = document.getElementById('ganttBody');
+    if (!body) return;
+    const items = allTasks.filter(t => t.due_date).sort((a, b) => a.due_date.localeCompare(b.due_date)).slice(0, 30);
+    if (!items.length) { body.innerHTML = `<div class="empty-state"><p>${t('empty_tasks')}</p></div>`; return; }
+    const today = new Date().toISOString().slice(0, 10);
+    body.innerHTML = items.map(x => {
+        const pct = x.status === 'done' ? 100 : x.status === 'in_progress' ? 50 : 10;
+        const late = x.due_date < today && x.status !== 'done';
+        return `<div style="margin-bottom:10px;background:var(--bg-glass);border:1px solid var(--border);border-radius:10px;padding:10px;">
+            <div style="display:flex;justify-content:space-between;font-size:13px;"><strong>${escapeHtml(x.title)}</strong><span class="due-date ${late ? 'overdue' : ''}">${formatDate(x.due_date)}</span></div>
+            <div style="height:8px;background:var(--bg-hover);border-radius:4px;margin-top:6px;"><div style="height:8px;width:${pct}%;border-radius:4px;background:${x.status === 'done' ? 'var(--done)' : 'var(--accent)'};"></div></div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${getStatusLabel(x.status)}${(x.depends_on || []).length ? ` • ⛓ ${x.depends_on.length}` : ''}${x.estimate_hours ? ` • ⏱ ${x.estimate_hours}h` : ''}</div>
+        </div>`;
+    }).join('');
+}
+
+// ==================== CALENDAR ====================
+let calCursor = new Date();
+function calMove(d) { calCursor.setMonth(calCursor.getMonth() + d); renderCalendar(); }
+function renderCalendar() {
+    const body = document.getElementById('calBody');
+    if (!body) return;
+    const y = calCursor.getFullYear(), m = calCursor.getMonth();
+    document.getElementById('calTitle').textContent = `${String(m + 1).padStart(2, '0')}/${y}`;
+    const first = new Date(y, m, 1).getDay();
+    const days = new Date(y, m + 1, 0).getDate();
+    const byDay = {};
+    allTasks.filter(x => x.due_date).forEach(x => {
+        const dd = new Date(x.due_date);
+        if (dd.getFullYear() === y && dd.getMonth() === m) {
+            const k = dd.getDate();
+            (byDay[k] = byDay[k] || []).push(x);
+        }
+    });
+    let html = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;">';
+    ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].forEach(d => html += `<div style="font-size:11px;color:var(--text-muted);text-align:center;">${d}</div>`);
+    for (let i = 0; i < first; i++) html += '<div></div>';
+    for (let d = 1; d <= days; d++) {
+        const ev = (byDay[d] || []).map(x => `<div onclick="openTaskDetail(${x.id})" style="font-size:11px;background:var(--accent-light);border-radius:6px;padding:2px 4px;margin-top:2px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(x.title)}</div>`).join('');
+        html += `<div style="min-height:64px;background:var(--bg-glass);border:1px solid var(--border);border-radius:8px;padding:4px;"><div style="font-size:12px;font-weight:700;">${d}</div>${ev}</div>`;
+    }
+    body.innerHTML = html + '</div>';
+}
+
+// ==================== WORKLOAD / GAMIFICATION / SHARE ====================
+async function loadWorkload() {
+    try {
+        const res = await fetch('/api/workload');
+        const rows = await res.json();
+        const max = Math.max(1, ...rows.map(r => r.active));
+        document.getElementById('workloadBody').innerHTML = rows.length ? rows.map(r => {
+            const w = Math.round(r.active / max * 100);
+            const hot = r.active >= 5 || r.overdue > 0;
+            return `<div style="margin-bottom:10px;background:var(--bg-glass);border:1px solid var(--border);border-radius:10px;padding:10px;">
+                <div style="display:flex;justify-content:space-between;font-size:13px;"><strong>${escapeHtml(r.full_name || r.username)}</strong><span>🔥 ${r.active} • ⚠ ${r.overdue} • ✓ ${r.done}</span></div>
+                <div style="height:8px;background:var(--bg-hover);border-radius:4px;margin-top:6px;"><div style="height:8px;width:${w}%;border-radius:4px;background:${hot ? 'var(--danger)' : 'var(--success)'};"></div></div>
+            </div>`;
+        }).join('') : `<div class="empty-state"><p>${t('no_data')}</p></div>`;
+    } catch (e) {}
+}
+async function loadGamification() {
+    try {
+        const res = await fetch('/api/gamification');
+        const d = await res.json();
+        document.getElementById('streakScore').textContent = d.streak;
+        document.getElementById('badgeRow').innerHTML = (d.badges || []).map(b =>
+            `<span class="priority-tag low" style="font-size:14px;">${b.icon} ${escapeHtml(b.name)}</span>`).join('') || `<span style="color:var(--text-muted);font-size:13px;">${t('no_data')}</span>`;
+    } catch (e) {}
+}
+async function loadShares() {
+    try {
+        const res = await fetch('/api/share');
+        if (!res.ok) return;
+        const rows = await res.json();
+        document.getElementById('shareBody').innerHTML = rows.length ? rows.map(s =>
+            `<tr><td><small>${location.origin}/share/${escapeHtml(s.token)}</small></td><td>${escapeHtml(s.mode)}</td><td><button class="btn-icon" onclick="delShare('${s.token}')">&#10005;</button></td></tr>`).join('')
+            : `<tr><td colspan="3" class="empty-state"><p>${t('no_data')}</p></td></tr>`;
+    } catch (e) {}
+}
+async function createShare() {
+    const res = await fetch('/api/share', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: document.getElementById('shareMode').value }) });
+    const d = await res.json();
+    if (d.url) { prompt('Link khách:', location.origin + d.url); loadShares(); }
+}
+async function delShare(token) { await fetch(`/api/share/${token}`, { method: 'DELETE' }); loadShares(); }
+async function saveExtraIntegrations() {
+    const body = {
+        slack_url: document.getElementById('intSlack').value, teams_url: document.getElementById('intTeams').value,
+        github_repo: document.getElementById('intGithub').value, skills: document.getElementById('setSkills').value
+    };
+    const res = await fetch('/api/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) { showToast('Lỗi lưu', 'error'); return; }
+    currentUser = await res.json(); fillSettings(); showToast('Đã lưu', 'success');
+}
+
+// ==================== AI & SMART ASSIGN ====================
+async function aiSuggest() {
+    const title = document.getElementById('taskTitle').value || document.getElementById('taskDesc').value;
+    if (!title.trim()) { showToast('Nhập tiêu đề trước', 'error'); return; }
+    const box = document.getElementById('aiSuggestBox');
+    box.innerHTML = '...';
+    const res = await fetch('/api/ai/suggest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ goal: title }) });
+    const d = await res.json();
+    box.innerHTML = (d.suggestions || []).map((s, i) =>
+        `<label class="checkbox-label"><input type="checkbox" class="ai-sub" value="${escapeHtml(s.title)}" checked><span>${escapeHtml(s.title)}</span></label>`).join('')
+        + `<div style="font-size:11px;color:var(--text-muted);">Tick mục muốn thêm làm subtask khi lưu</div>`;
+    const taskId = document.getElementById('taskId').value;
+    if (taskId) {
+        box.innerHTML += `<button type="button" class="btn btn-sm btn-secondary" onclick="saveAiSubs(${taskId})">Thêm vào task</button>`;
+    }
+}
+async function saveAiSubs(taskId) {
+    const items = Array.from(document.querySelectorAll('.ai-sub:checked')).map(c => c.value);
+    for (const ttl of items) {
+        await fetch(`/api/tasks/${taskId}/subtasks`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: ttl }) });
+    }
+    showToast(`Đã thêm ${items.length} subtask`, 'success');
+}
+async function smartAssign() {
+    const skills = document.getElementById('taskSkills').value;
+    const res = await fetch(`/api/smart-assign?skills=${encodeURIComponent(skills)}`);
+    const rows = await res.json();
+    document.getElementById('smartBox').innerHTML = rows.map(r =>
+        `<button type="button" class="btn btn-sm btn-secondary" onclick="pickSmart(${r.id})">${escapeHtml(r.username)} (việc: ${r.workload}, khớp: ${r.skill_match})</button>`).join(' ');
+}
+function pickSmart(uid) {
+    document.querySelectorAll('input[name="assignee"]').forEach(cb => { if (parseInt(cb.value) === uid) cb.checked = true; });
+    showToast('Đã chọn người được gợi ý', 'success');
+}
+
+// ==================== TASK DETAIL ====================
+let detailTaskId = null;
+async function openTaskDetail(id) {
+    detailTaskId = id;
+    const task = allTasks.find(x => x.id === id);
+    if (!task) return;
+    document.getElementById('taskDetailTitle').textContent = task.title;
+    const hrs = (task.actual_seconds || 0) / 3600;
+    document.getElementById('taskDetailMeta').innerHTML =
+        `${getStatusLabel(task.status)} • ⏱ ${hrs.toFixed(1)}h${task.estimate_hours ? ` / ước lượng ${task.estimate_hours}h` : ''} • 💬 ${task.comment_count || 0}${(task.depends_on || []).length ? ` • ⛓ phụ thuộc #${task.depends_on.join(', #')}` : ''}`;
+    document.getElementById('taskDetailModal').classList.add('active');
+    loadSubs(); loadComments(); loadAttaches(); resetPom();
+}
+function closeTaskDetail() { document.getElementById('taskDetailModal').classList.remove('active'); detailTaskId = null; stopPom(); }
+async function loadSubs() {
+    const res = await fetch(`/api/tasks/${detailTaskId}/subtasks`);
+    const rows = await res.json();
+    document.getElementById('subList').innerHTML = rows.length ? rows.map(s =>
+        `<label class="checkbox-label"><input type="checkbox" ${s.done ? 'checked' : ''} onchange="toggleSub(${s.id}, this.checked)"><span style="${s.done ? 'text-decoration:line-through;opacity:.6;' : ''}">${escapeHtml(s.title)}</span></label>`).join('')
+        : `<div style="font-size:12px;color:var(--text-muted);">${t('empty_tasks')}</div>`;
+    const task = allTasks.find(x => x.id === detailTaskId);
+    if (task) task.subtasks = rows;
+}
+async function addSub() {
+    const v = document.getElementById('newSubTitle').value.trim();
+    if (!v) return;
+    await fetch(`/api/tasks/${detailTaskId}/subtasks`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: v }) });
+    document.getElementById('newSubTitle').value = ''; loadSubs();
+}
+async function toggleSub(id, done) {
+    await fetch(`/api/subtasks/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ done }) });
+    loadSubs();
+}
+function renderMentions(text) {
+    return escapeHtml(text).replace(/@(\w+)/g, '<span class="assignee-tag">@$1</span>');
+}
+async function loadComments() {
+    const res = await fetch(`/api/tasks/${detailTaskId}/comments`);
+    const rows = await res.json();
+    document.getElementById('commentList').innerHTML = rows.length ? rows.map(c =>
+        `<div style="background:var(--bg-hover);border-radius:8px;padding:6px 10px;margin-bottom:6px;font-size:13px;"><strong>@${escapeHtml(c.username || '?')}</strong> <small style="color:var(--text-muted);">${formatDate(c.created_at)}</small><div>${renderMentions(c.text || '')}</div></div>`).join('')
+        : `<div style="font-size:12px;color:var(--text-muted);">${t('no_hist')}</div>`;
+}
+async function addComment() {
+    const v = document.getElementById('newComment').value.trim();
+    if (!v) return;
+    await fetch(`/api/tasks/${detailTaskId}/comments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: v }) });
+    document.getElementById('newComment').value = ''; loadComments(); loadTasks();
+}
+async function logTime(secs) {
+    await fetch(`/api/tasks/${detailTaskId}/time`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seconds: secs, note: 'timer' }) });
+    showToast(`Đã ghi ${Math.round(secs / 60)} phút`, 'success'); loadTasks();
+}
+async function loadAttaches() {
+    const res = await fetch(`/api/tasks/${detailTaskId}/attachments`);
+    const rows = await res.json();
+    document.getElementById('attachList').innerHTML = (rows || []).map(a =>
+        `<div style="font-size:13px;margin-bottom:4px;">📎 <a href="${escapeHtml(a.url || '#')}" target="_blank" style="color:var(--accent);">${escapeHtml(a.filename || a.url || '')}</a> <small style="color:var(--text-muted);">${escapeHtml(a.note || '')}</small></div>`).join('');
+}
+async function addAttach() {
+    const url = document.getElementById('attachUrl').value.trim();
+    const note = document.getElementById('attachNote').value.trim();
+    if (!url) return;
+    await fetch(`/api/tasks/${detailTaskId}/attachments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, note, filename: url }) });
+    document.getElementById('attachUrl').value = ''; document.getElementById('attachNote').value = ''; loadAttaches();
+}
+
+// Pomodoro
+let pomTimer = null, pomLeft = 1500, pomRunning = false;
+function resetPom() { stopPom(); pomLeft = 1500; pomDraw(); }
+function pomDraw() {
+    const el = document.getElementById('pomTime');
+    if (el) el.textContent = `${String(Math.floor(pomLeft / 60)).padStart(2, '0')}:${String(pomLeft % 60).padStart(2, '0')}`;
+    const b = document.getElementById('pomBtn');
+    if (b) b.textContent = pomRunning ? '⏸ Tạm dừng' : '▶ Bắt đầu';
+}
+function togglePom() {
+    if (pomRunning) { stopPom(); return; }
+    pomRunning = true; pomDraw();
+    pomTimer = setInterval(() => {
+        pomLeft--;
+        pomDraw();
+        if (pomLeft <= 0) {
+            stopPom(); pomLeft = 1500; pomDraw();
+            logTime(1500);
+            showToast('Hết 1 Pomodoro (25p) — đã ghi giờ!', 'success');
+        }
+    }, 1000);
+}
+function stopPom() { pomRunning = false; if (pomTimer) clearInterval(pomTimer); pomTimer = null; pomDraw(); }
+
+// ==================== BULK / SHORTCUTS / REALTIME ====================
+let bulkMode = false;
+const bulkSet = new Set();
+function toggleBulk() {
+    bulkMode = !bulkMode;
+    document.querySelectorAll('.bulk-col').forEach(el => el.style.display = bulkMode ? '' : 'none');
+    document.getElementById('bulkBar').style.display = bulkMode ? 'inline' : 'none';
+    document.getElementById('bulkBtn').textContent = bulkMode ? 'Xong' : 'Chọn nhiều';
+    if (!bulkMode) { bulkSet.clear(); renderList(getFilteredTasks()); }
+}
+function toggleBulkAll(checked) {
+    document.querySelectorAll('.bulk-check').forEach(cb => { cb.checked = checked; const id = parseInt(cb.value); if (checked) bulkSet.add(id); else bulkSet.delete(id); });
+}
+function toggleBulkOne(cb) { const id = parseInt(cb.value); if (cb.checked) bulkSet.add(id); else bulkSet.delete(id); }
+async function bulkSetStatus(status) {
+    if (!bulkSet.size) { showToast('Chưa chọn task', 'error'); return; }
+    const res = await fetch('/api/tasks/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [...bulkSet], status }) });
+    const d = await res.json();
+    if (!res.ok) { showToast(d.error || 'Lỗi', 'error'); return; }
+    bulkSet.clear(); await loadTasks(); renderList(getFilteredTasks()); showToast(d.message, 'success');
+}
+async function bulkClaim() {
+    if (!bulkSet.size) { showToast('Chưa chọn task', 'error'); return; }
+    await fetch('/api/tasks/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [...bulkSet], claim_me: true }) });
+    bulkSet.clear(); await loadTasks(); renderList(getFilteredTasks()); showToast('Đã nhận', 'success');
+}
+document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+    if (e.key === 'm' || e.key === 'M') { if (bulkSet.size) bulkClaim(); }
+    if (e.key === 'c' || e.key === 'C') {
+        const first = getFilteredTasks()[0];
+        if (first) { openTaskDetail(first.id); setTimeout(() => { const i = document.getElementById('newComment'); if (i) i.focus(); }, 300); }
+    }
+});
+let lastTaskSig = '';
+setInterval(async () => {
+    try {
+        if (!currentUser || document.hidden) return;
+        const res = await fetch('/api/tasks');
+        if (!res.ok) return;
+        const data = await res.json();
+        const sig = data.map(x => x.id + ':' + x.status).join(',');
+        if (lastTaskSig && sig !== lastTaskSig) {
+            allTasks = data; renderTasks();
+            if (['gantt', 'calendar', 'workload'].includes(currentView)) {
+                if (currentView === 'gantt') renderGantt();
+                if (currentView === 'calendar') renderCalendar();
+            }
+            showToast('Có cập nhật mới (real-time)', 'info');
+        }
+        lastTaskSig = sig;
+        if (currentUser && currentUser.auto_overdue_warn) {
+            const od = data.filter(x => x.due_date && x.due_date < new Date().toISOString().slice(0, 10) && x.status !== 'done');
+            if (od.length && !window._warnedOverdue) { window._warnedOverdue = true; showToast(`⚠ ${od.length} task quá hạn!`, 'error'); }
+        }
+    } catch (e) {}
+}, 15000);
