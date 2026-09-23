@@ -653,6 +653,16 @@ a:hover {
     box-shadow: 0 0 0 4px var(--accent-light);
 }
 
+select option {
+    background: #1a1a24;
+    color: #f0f0f5;
+}
+
+[data-theme="light"] select option {
+    background: #ffffff;
+    color: #1a1a24;
+}
+
 /* ===== STATS CARDS ===== */
 .stats-grid {
     display: grid;
