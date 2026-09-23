@@ -105,10 +105,13 @@ function setupNav() {
 function getFilteredTasks() {
     const priority = document.getElementById('filterPriority').value;
     const status = document.getElementById('filterStatus').value;
+    const scopeEl = document.getElementById('filterScope');
+    const scope = scopeEl ? scopeEl.value : '';
     const search = document.getElementById('searchInput').value.toLowerCase().trim();
     return allTasks.filter(t => {
         if (priority && t.priority !== priority) return false;
         if (status && t.status !== status) return false;
+        if (scope && (t.scope || 'lang') !== scope) return false;
         if (search) {
             if (!t.title.toLowerCase().includes(search) && !(t.description || '').toLowerCase().includes(search) &&
                 !t.assigned_users.some(u => u.username.toLowerCase().includes(search))) return false;
@@ -232,6 +235,7 @@ function createTaskCard(task) {
         <div class="task-card-footer">
             <div class="task-card-meta">
                 <span class="priority-tag ${task.priority}">${getPriorityLabel(task.priority)}</span>
+                <span class="priority-tag ${task.scope === 'xa' ? 'high' : 'low'}">${getScopeLabel(task.scope)}</span>
                 ${assigneeTags || `<span class="assignee-tag" style="color:var(--text-muted)">${t('no_one')}</span>`}
                 ${slotInfo} ${pointsTag}
                 ${task.due_date ? `<span class="due-date ${isOverdue ? 'overdue' : ''}">${formatDate(task.due_date)}</span>` : ''}
@@ -246,7 +250,7 @@ function createTaskCard(task) {
 
 function renderList(tasks) {
     const tbody = document.getElementById('taskTableBody');
-    if (!tasks.length) { tbody.innerHTML = `<tr><td colspan="8" class="empty-state"><p>${t('empty_tasks')}</p></td></tr>`; return; }
+    if (!tasks.length) { tbody.innerHTML = `<tr><td colspan="9" class="empty-state"><p>${t('empty_tasks')}</p></td></tr>`; return; }
     tbody.innerHTML = tasks.map(task => {
         const isAdmin = currentUser.role === 'bithu';
         const isClaimed = task.is_claimed_by_me;
@@ -256,7 +260,7 @@ function renderList(tasks) {
         const assigneeNames = task.assigned_users.map(u => escapeHtml(u.username)).join(', ');
         let statusCell = (isClaimed || isAdmin) ? `<select class="status-select" onchange="changeStatus(${task.id}, this.value)"><option value="pending" ${task.status === 'pending' ? 'selected' : ''}>${getStatusLabel('pending')}</option><option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>${getStatusLabel('in_progress')}</option><option value="done" ${task.status === 'done' ? 'selected' : ''}>${getStatusLabel('done')}</option></select>` : `<span class="status-label">${getStatusLabel(task.status)}</span>`;
         let claimBtn = canClaim ? `<button class="btn btn-claim btn-sm" onclick="claimTask(${task.id})">${t('claim_sm')}</button>` : isClaimed && !isAdmin ? `<button class="btn btn-unclaim btn-sm" onclick="unclaimTask(${task.id})">${t('unclaim')}</button>` : '';
-        return `<tr><td>${bulkMode ? `<input type="checkbox" class="bulk-check" value="${task.id}" onchange="toggleBulkOne(this)"> ` : ''}<div class="task-title-cell" onclick="openTaskDetail(${task.id})" style="cursor:pointer;display:inline-block;">${escapeHtml(task.title)}${task.description ? `<small>${escapeHtml(task.description.substring(0, 60))}${task.description.length > 60 ? '...' : ''}</small>` : ''}</div></td><td>${statusCell}</td><td><span class="priority-tag ${task.priority}">${getPriorityLabel(task.priority)}</span></td><td>${assigneeNames || `<span style="color:var(--text-muted)">${t('no_one')}</span>`}</td><td><span class="slot-info">${task.assignee_count}/${task.max_assignees}</span></td><td>${task.points > 0 ? `<span class="priority-tag low">+${task.points}</span>` : '-'}</td><td>${task.due_date ? `<span class="due-date ${isOverdue ? 'overdue' : ''}">${formatDate(task.due_date)}</span>` : '-'}</td><td>${adminActions}${claimBtn}</td></tr>`;
+        return `<tr><td>${bulkMode ? `<input type="checkbox" class="bulk-check" value="${task.id}" onchange="toggleBulkOne(this)"> ` : ''}<div class="task-title-cell" onclick="openTaskDetail(${task.id})" style="cursor:pointer;display:inline-block;">${escapeHtml(task.title)}${task.description ? `<small>${escapeHtml(task.description.substring(0, 60))}${task.description.length > 60 ? '...' : ''}</small>` : ''}</div></td><td><span class="priority-tag ${task.scope === 'xa' ? 'high' : 'low'}">${getScopeLabel(task.scope)}</span></td><td>${statusCell}</td><td><span class="priority-tag ${task.priority}">${getPriorityLabel(task.priority)}</span></td><td>${assigneeNames || `<span style="color:var(--text-muted)">${t('no_one')}</span>`}</td><td><span class="slot-info">${task.assignee_count}/${task.max_assignees}</span></td><td>${task.points > 0 ? `<span class="priority-tag low">+${task.points}</span>` : '-'}</td><td>${task.due_date ? `<span class="due-date ${isOverdue ? 'overdue' : ''}">${formatDate(task.due_date)}</span>` : '-'}</td><td>${adminActions}${claimBtn}</td></tr>`;
     }).join('');
 }
 
@@ -420,6 +424,7 @@ function openTaskModal(taskId = null) {
         document.getElementById('taskTitle').value = task.title;
         document.getElementById('taskDesc').value = task.description || '';
         document.getElementById('taskStatus').value = task.status;
+        document.getElementById('taskScope').value = task.scope || 'lang';
         document.getElementById('taskPriority').value = task.priority;
         document.getElementById('taskMaxAssignees').value = task.max_assignees;
         document.getElementById('taskDueDate').value = task.due_date || '';
@@ -472,6 +477,7 @@ async function saveTask() {
     const payload = {
         title, description: document.getElementById('taskDesc').value.trim(),
         status: document.getElementById('taskStatus').value, priority: document.getElementById('taskPriority').value,
+        scope: document.getElementById('taskScope').value || 'lang',
         max_assignees: maxAssignees, assigned_to: assignedTo,
         due_date: document.getElementById('taskDueDate').value || null,
         points: parseInt(document.getElementById('taskPoints').value) || 0,
@@ -580,7 +586,8 @@ vi: {
     nav_users: 'Quản lý user', nav_mine: 'Điểm của tôi', nav_settings: 'Cài đặt', logout: 'Đăng xuất',
     role_bithu: 'Bí thư', role_user: 'Đoàn viên',
     stat_total: 'Tổng nhiệm vụ', stat_pending: 'Chờ xử lý', stat_inprog: 'Đang thực hiện', stat_done: 'Hoàn thành', stat_mine: 'Điểm của bạn',
-    tasks_suffix: 'nhiệm vụ', search_ph: 'Tìm nhiệm vụ...', f_all_prio: 'Tất cả ưu tiên', f_all_status: 'Tất cả trạng thái', add_task: '+ Thêm nhiệm vụ',
+    tasks_suffix: 'nhiệm vụ', search_ph: 'Tìm nhiệm vụ...', f_all_prio: 'Tất cả ưu tiên', f_all_status: 'Tất cả trạng thái', f_all_scope: 'Tất cả việc',
+    scope_lang: 'Việc làng', scope_xa: 'Việc xã', th_scope: 'Phân loại', lbl_task_scope: 'Phân loại', add_task: '+ Thêm nhiệm vụ',
     empty_tasks: 'Không có task nào', no_data: 'Chưa có dữ liệu', no_points: 'Chưa có điểm', no_hist: 'Chưa có lịch sử',
     th_task: 'Nhiệm vụ', th_status: 'Trạng thái', th_priority: 'Ưu tiên', th_assignee: 'Người thực hiện', th_slot: 'Slot',
     th_points: 'Điểm', th_due: 'Hạn chót', th_action: 'Thao tác', th_no: 'STT', th_member: 'Đoàn viên', th_total: 'Tổng điểm',
@@ -634,7 +641,8 @@ en: {
     nav_users: 'Users', nav_mine: 'My points', nav_settings: 'Settings', logout: 'Logout',
     role_bithu: 'Secretary', role_user: 'Member',
     stat_total: 'Total tasks', stat_pending: 'Pending', stat_inprog: 'In progress', stat_done: 'Done', stat_mine: 'Your points',
-    tasks_suffix: 'tasks', search_ph: 'Search tasks...', f_all_prio: 'All priorities', f_all_status: 'All statuses', add_task: '+ Add task',
+    tasks_suffix: 'tasks', search_ph: 'Search tasks...', f_all_prio: 'All priorities', f_all_status: 'All statuses', f_all_scope: 'All work',
+    scope_lang: 'Village', scope_xa: 'Commune', th_scope: 'Type', lbl_task_scope: 'Category', add_task: '+ Add task',
     empty_tasks: 'No tasks', no_data: 'No data', no_points: 'No points yet', no_hist: 'No history',
     th_task: 'Task', th_status: 'Status', th_priority: 'Priority', th_assignee: 'Assignees', th_slot: 'Slot',
     th_points: 'Points', th_due: 'Due date', th_action: 'Actions', th_no: '#', th_member: 'Member', th_total: 'Total',
@@ -686,6 +694,7 @@ en: {
 };
 function curLang() { return localStorage.getItem('lang') || (currentUser && currentUser.language) || 'vi'; }
 function t(k) { const L = curLang(); return (I18N[L] && I18N[L][k]) || I18N.vi[k] || k; }
+function getScopeLabel(s) { return curLang() === 'en' ? (s === 'xa' ? 'Commune' : 'Village') : (s === 'xa' ? 'Việc xã' : 'Việc làng'); }
 function getPriorityLabel(p) { const L = curLang() === 'en' ? { low: 'Low', medium: 'Med', high: 'High' } : { low: 'Thấp', medium: 'TB', high: 'Cao' }; return L[p] || p; }
 function getStatusLabel(s) { const L = curLang() === 'en' ? { pending: 'Pending', in_progress: 'In progress', done: 'Done' } : { pending: 'Chờ xử lý', in_progress: 'Đang thực hiện', done: 'Hoàn thành' }; return L[s] || s; }
 function formatDate(d) {
@@ -863,6 +872,12 @@ function applyLang(lang) {
     setOpts('fundAction', { set: t('op_set'), add: t('op_add'), subtract: t('op_sub') });
     setOpts('setTheme', { dark: t('theme_dark'), light: t('theme_light'), system: t('theme_sys') });
     setOpts('setDefaultView', { kanban: 'Kanban', list: t('nav_list') });
+    setOpts('taskScope', { lang: t('scope_lang'), xa: t('scope_xa') });
+    const fsc = document.getElementById('filterScope');
+    if (fsc && fsc.options.length >= 3) {
+        fsc.options[0].textContent = t('f_all_scope');
+        fsc.options[1].textContent = t('scope_lang'); fsc.options[2].textContent = t('scope_xa');
+    }
     renderTasks();
 }
 

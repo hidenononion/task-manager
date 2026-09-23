@@ -381,7 +381,7 @@ def init_db():
     except Exception:
         pass
     for col, typ in [('estimate_hours', 'REAL DEFAULT 0'), ('actual_seconds', 'INTEGER DEFAULT 0'),
-                     ('skills', "TEXT DEFAULT ''")]:
+                     ('skills', "TEXT DEFAULT ''"), ('scope', "TEXT DEFAULT 'lang'")]:
         try:
             ensure_column(cur, 'tasks', col, typ)
         except Exception:
@@ -927,11 +927,11 @@ def api_export(kind):
     out = io.StringIO()
     w = csv.writer(out)
     if kind == 'tasks.csv':
-        rows = cur.execute("SELECT id, title, description, status, priority, due_date, points, created_at FROM tasks WHERE deleted_at IS NULL ORDER BY id").fetchall()
-        w.writerow(['id', 'title', 'description', 'status', 'priority', 'due_date', 'points', 'created_at'])
+        rows = cur.execute("SELECT id, title, description, status, priority, due_date, points, scope, created_at FROM tasks WHERE deleted_at IS NULL ORDER BY id").fetchall()
+        w.writerow(['id', 'title', 'description', 'status', 'priority', 'due_date', 'points', 'scope', 'created_at'])
         for r in rows:
             d = dict(r)
-            w.writerow([d.get('id'), d.get('title'), d.get('description'), d.get('status'), d.get('priority'), d.get('due_date'), d.get('points'), d.get('created_at')])
+            w.writerow([d.get('id'), d.get('title'), d.get('description'), d.get('status'), d.get('priority'), d.get('due_date'), d.get('points'), d.get('scope', 'lang'), d.get('created_at')])
     elif kind == 'finance.csv':
         rows = cur.execute("SELECT id, type, amount, description, category, date FROM finance ORDER BY id").fetchall()
         w.writerow(['id', 'type', 'amount', 'description', 'category', 'date'])
@@ -966,10 +966,11 @@ def api_import_tasks():
             pts = int(float(row.get('points') or 0))
         except Exception:
             pts = 0
-        cur.execute(q("INSERT INTO tasks (title, description, status, priority, due_date, points, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                      "INSERT INTO tasks (title, description, status, priority, due_date, points, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)"),
+        cur.execute(q("INSERT INTO tasks (title, description, status, priority, due_date, points, scope, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                      "INSERT INTO tasks (title, description, status, priority, due_date, points, scope, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"),
                     (title, row.get('description', ''), row.get('status', 'pending') or 'pending',
-                     row.get('priority', 'medium') or 'medium', row.get('due_date') or None, pts, session['user_id']))
+                     row.get('priority', 'medium') or 'medium', row.get('due_date') or None, pts,
+                     row.get('scope') if row.get('scope') in ('lang', 'xa') else 'lang', session['user_id']))
         count += 1
     conn.commit()
     conn.close()
@@ -1053,6 +1054,10 @@ def serialize_task(conn, task, user_id=None, role=None):
     d['is_claimed_by_me'] = any(u['id'] == user_id for u in d['assigned_users']) if user_id else False
     d['points'] = task['points'] or 0
     try:
+        d['scope'] = dict(task).get('scope') or 'lang'
+    except Exception:
+        d['scope'] = 'lang'
+    try:
         cur = conn.cursor()
         subs = cur.execute(q("SELECT id, title, done FROM subtasks WHERE task_id = %s ORDER BY id",
                              "SELECT id, title, done FROM subtasks WHERE task_id = ? ORDER BY id"),
@@ -1088,6 +1093,10 @@ def api_tasks():
     else:
         tasks = cur.execute("SELECT * FROM tasks WHERE deleted_at IS NULL ORDER BY created_at DESC").fetchall()
 
+    scope = (request.args.get('scope') or '').strip()
+    if scope in ('lang', 'xa'):
+        tasks = [tk for tk in tasks if dict(tk).get('scope', 'lang') == scope]
+
     result = [serialize_task(conn, t, user_id, role) for t in tasks]
     conn.close()
     return jsonify(result)
@@ -1122,10 +1131,11 @@ def api_create_task():
         est = 0
 
     cur.execute(q(
-        "INSERT INTO tasks (title, description, status, priority, due_date, max_assignees, points, estimate_hours, skills, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
-        "INSERT INTO tasks (title, description, status, priority, due_date, max_assignees, points, estimate_hours, skills, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
+        "INSERT INTO tasks (title, description, status, priority, due_date, max_assignees, points, estimate_hours, skills, scope, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+        "INSERT INTO tasks (title, description, status, priority, due_date, max_assignees, points, estimate_hours, skills, scope, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"),
         (title, data.get('description', '') or '', data.get('status', 'pending'), data.get('priority', 'medium'),
-         due_date, max_assignees, points, est, (data.get('skills') or ''), session['user_id']))
+         due_date, max_assignees, points, est, (data.get('skills') or ''),
+         data.get('scope', 'lang') if data.get('scope') in ('lang', 'xa') else 'lang', session['user_id']))
     task_id = cur.fetchone()['id'] if is_pg() else cur.lastrowid
 
     for uid in assigned_ids:
@@ -1183,11 +1193,12 @@ def api_update_task(task_id):
         return jsonify({'error': f'Tối đa giao cho {max_assignees} người'}), 400
 
     cur.execute(q(
-        "UPDATE tasks SET title=%s, description=%s, status=%s, priority=%s, due_date=%s, max_assignees=%s, points=%s, estimate_hours=%s, skills=%s WHERE id=%s",
-        "UPDATE tasks SET title=?, description=?, status=?, priority=?, due_date=?, max_assignees=?, points=?, estimate_hours=?, skills=? WHERE id=?"),
+        "UPDATE tasks SET title=%s, description=%s, status=%s, priority=%s, due_date=%s, max_assignees=%s, points=%s, estimate_hours=%s, skills=%s, scope=%s WHERE id=%s",
+        "UPDATE tasks SET title=?, description=?, status=?, priority=?, due_date=?, max_assignees=?, points=?, estimate_hours=?, skills=?, scope=? WHERE id=?"),
         (data.get('title', t['title']), data.get('description', t['description']) or '',
          data.get('status', t['status']), data.get('priority', t['priority']),
-         due_date, max_assignees, points, est, data.get('skills', t.get('skills', '') or ''), task_id))
+         due_date, max_assignees, points, est, data.get('skills', t.get('skills', '') or ''),
+         data.get('scope', t.get('scope', 'lang') or 'lang') if (data.get('scope', t.get('scope', 'lang') or 'lang')) in ('lang', 'xa') else 'lang', task_id))
 
     cur.execute(q("DELETE FROM task_assignments WHERE task_id = %s", "DELETE FROM task_assignments WHERE task_id = ?"), (task_id,))
     for uid in assigned_ids:
