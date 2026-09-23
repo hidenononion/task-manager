@@ -528,7 +528,7 @@ async function loadUsersList() {
                 <td><div style="display:flex;gap:4px;"><input type="text" value="${escapeHtml(u.title || '')}" id="title-${u.id}" placeholder="${t('th_title_col')}" style="width:120px;"><button class="btn btn-sm btn-secondary" onclick="updateUserTitle(${u.id})">${t('save')}</button></div></td>
                 <td><select class="status-select" onchange="updateUserRole(${u.id}, this.value)">${roleOptions}</select></td>
                 <td>${u.score || 0}</td>
-                <td></td>
+                <td><button class="btn-icon" onclick="delUser(${u.id}, '${escapeHtml(u.username)}')" title="Xóa">&#10005;</button></td>
             </tr>`;
         }).join('');
     } catch (err) { showToast('Lỗi tải danh sách user', 'error'); }
@@ -559,6 +559,16 @@ async function updateUserRole(userId, newRole) {
         const data = await res.json();
         if (!res.ok) { showToast(data.error || 'Lỗi cập nhật', 'error'); loadUsersList(); return; }
         showToast('Đã cập nhật role', 'success');
+    } catch (err) { showToast('Lỗi kết nối', 'error'); }
+}
+
+async function delUser(userId, username) {
+    if (!confirm(`${t('del_user_q')} "${username}"?`)) return;
+    try {
+        const res = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) { showToast(data.error || 'Lỗi xóa', 'error'); return; }
+        loadUsersList(); loadUsers(); showToast(data.message, 'success');
     } catch (err) { showToast('Lỗi kết nối', 'error'); }
 }
 
@@ -621,7 +631,7 @@ vi: {
     new_task: 'Thêm nhiệm vụ mới', edit_task: 'Sửa nhiệm vụ', lbl_task_title: 'Tiêu đề *', lbl_task_desc: 'Mô tả',
     lbl_task_status: 'Trạng thái', lbl_task_prio: 'Ưu tiên', assign_to: 'Giao cho (tối đa 3 người)', max_claim: 'Số người tối đa nhận task',
     due: 'Hạn chót', pts_done: 'Điểm khi hoàn thành',
-    confirm_del: 'Xác nhận xóa', del_q: 'Bạn có chắc muốn xóa nhiệm vụ này?', del_btn: 'Xóa',
+    confirm_del: 'Xác nhận xóa', del_q: 'Bạn có chắc muốn xóa nhiệm vụ này?', del_btn: 'Xóa', del_user_q: 'Xóa tài khoản',
     addsub: 'Cộng/trừ điểm', member: 'Đoàn viên', pts_lbl: 'Điểm (cộng +, trừ -)', reason: 'Lý do', points_total: 'Tổng điểm',
     add_fin_trans: 'Thêm giao dịch', trans_type: 'Loại giao dịch', income: 'Thu', expense: 'Chi (tự trừ quỹ)',
     amount: 'Số tiền', desc: 'Mô tả', category: 'Loại chi / Nhóm',
@@ -676,7 +686,7 @@ en: {
     new_task: 'Add new task', edit_task: 'Edit task', lbl_task_title: 'Title *', lbl_task_desc: 'Description',
     lbl_task_status: 'Status', lbl_task_prio: 'Priority', assign_to: 'Assign to (max 3)', max_claim: 'Max claimants',
     due: 'Due date', pts_done: 'Points on completion',
-    confirm_del: 'Confirm delete', del_q: 'Are you sure you want to delete this task?', del_btn: 'Delete',
+    confirm_del: 'Confirm delete', del_q: 'Are you sure you want to delete this task?', del_btn: 'Delete', del_user_q: 'Delete account',
     addsub: 'Add/deduct points', member: 'Member', pts_lbl: 'Points (+ add, - deduct)', reason: 'Reason', points_total: 'Total points',
     add_fin_trans: 'Add transaction', trans_type: 'Transaction type', income: 'Income', expense: 'Expense (from fund)',
     amount: 'Amount', desc: 'Description', category: 'Category',

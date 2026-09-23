@@ -686,6 +686,42 @@ def api_update_user(user_id):
     return jsonify({'message': 'Đã cập nhật'})
 
 
+@app.route('/api/users/<int:user_id>', methods=['DELETE'])
+@login_required
+@admin_required
+def api_delete_user(user_id):
+    if user_id == session['user_id']:
+        return jsonify({'error': 'Không thể xóa chính mình'}), 400
+    conn = get_db()
+    cur = conn.cursor()
+    target = cur.execute(q("SELECT id, username FROM users WHERE id = %s", "SELECT id, username FROM users WHERE id = ?"),
+                         (user_id,)).fetchone()
+    if not target:
+        conn.close()
+        return jsonify({'error': 'User không tồn tại'}), 404
+    if dict(target).get('username') == 'admin':
+        conn.close()
+        return jsonify({'error': 'Không thể xóa tài khoản admin gốc'}), 400
+    for tbl in ('task_assignments', 'points_log', 'comments', 'time_logs', 'login_history'):
+        try:
+            col = 'user_id'
+            cur.execute(q(f"DELETE FROM {tbl} WHERE {col} = %s", f"DELETE FROM {tbl} WHERE {col} = ?"), (user_id,))
+        except Exception:
+            pass
+    for tbl, col in (('tasks', 'created_by'), ('finance', 'created_by'), ('subtasks', 'created_by'),
+                     ('attachments', 'created_by'), ('automation_rules', 'created_by'), ('webhooks', 'created_by'),
+                     ('points_log', 'created_by')):
+        try:
+            cur.execute(q(f"UPDATE {tbl} SET {col} = NULL WHERE {col} = %s",
+                          f"UPDATE {tbl} SET {col} = NULL WHERE {col} = ?"), (user_id,))
+        except Exception:
+            pass
+    cur.execute(q("DELETE FROM users WHERE id = %s", "DELETE FROM users WHERE id = ?"), (user_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã xóa tài khoản'})
+
+
 # ==================== SETTINGS API ====================
 
 PROFILE_FIELDS = ['full_name', 'avatar', 'department', 'phone', 'email']
