@@ -627,7 +627,9 @@ vi: {
     data_io: 'Nhập / Xuất dữ liệu', export_tasks: 'Xuất tasks CSV', export_fin: 'Xuất tài chính CSV',
     import_lbl: 'Dán CSV để nhập tasks (cột: title,description,status,priority,due_date,points)', import_btn: 'Nhập tasks',
     trash_h: 'Thùng rác (giữ 30 ngày)', trash_empty: 'Thùng rác trống', restore: 'Khôi phục', purge: 'Xóa vĩnh viễn',
-    storage_h: 'Dung lượng',
+    storage_h: 'Dung lượng', danger_h: 'Vùng nguy hiểm',
+    danger_desc: 'Reset xóa toàn bộ task, điểm, tài chính, quỹ về 0 — chỉ giữ lại tài khoản Bí thư.',
+    danger_btn: 'Reset hệ thống',
     new_task: 'Thêm nhiệm vụ mới', edit_task: 'Sửa nhiệm vụ', lbl_task_title: 'Tiêu đề *', lbl_task_desc: 'Mô tả',
     lbl_task_status: 'Trạng thái', lbl_task_prio: 'Ưu tiên', assign_to: 'Giao cho (tối đa 3 người)', max_claim: 'Số người tối đa nhận task',
     due: 'Hạn chót', pts_done: 'Điểm khi hoàn thành',
@@ -682,7 +684,9 @@ en: {
     data_io: 'Import / Export', export_tasks: 'Export tasks CSV', export_fin: 'Export finance CSV',
     import_lbl: 'Paste CSV to import tasks (columns: title,description,status,priority,due_date,points)', import_btn: 'Import tasks',
     trash_h: 'Trash (kept 30 days)', trash_empty: 'Trash is empty', restore: 'Restore', purge: 'Delete forever',
-    storage_h: 'Storage',
+    storage_h: 'Storage', danger_h: 'Danger zone',
+    danger_desc: 'Reset deletes all tasks, points, finance and zeroes the fund — Secretary accounts are kept.',
+    danger_btn: 'Reset system',
     new_task: 'Add new task', edit_task: 'Edit task', lbl_task_title: 'Title *', lbl_task_desc: 'Description',
     lbl_task_status: 'Status', lbl_task_prio: 'Priority', assign_to: 'Assign to (max 3)', max_claim: 'Max claimants',
     due: 'Due date', pts_done: 'Points on completion',
@@ -1014,7 +1018,16 @@ async function loadTrash() {
     } catch (e) {}
 }
 async function restoreTrash(id) { await fetch(`/api/trash/${id}/restore`, { method: 'POST' }); loadTrash(); loadTasks(); showToast('Đã khôi phục', 'success'); }
-async function purgeTrash(id) { if (!confirm('Xóa vĩnh viễn?')) return; await fetch(`/api/trash/${id}/purge`, { method: 'DELETE' }); loadTrash(); showToast('Đã xóa vĩnh viễn', 'success'); }
+async function purgeTrash(id) { if (!confirm(t('purge') + '?')) return; await fetch(`/api/trash/${id}/purge`, { method: 'DELETE' }); loadTrash(); showToast(t('purge'), 'success'); }
+async function resetSystem() {
+    const v = prompt(`${t('danger_btn')}? ${t('danger_desc')} (${t('confirm')}: RESET)`);
+    if (v !== 'RESET') return;
+    const res = await fetch('/api/admin/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: 'RESET' }) });
+    const d = await res.json();
+    if (!res.ok) { showToast(d.error || 'Lỗi', 'error'); return; }
+    showToast(`${d.message} (${(d.kept || []).join(', ')})`, 'success');
+    loadTasks(); loadTrash(); loadStorage();
+}
 async function loadStorage() {
     try {
         const res = await fetch('/api/storage');

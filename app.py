@@ -1051,6 +1051,34 @@ def api_trash_purge(task_id):
     return jsonify({'message': 'Đã xóa vĩnh viễn'})
 
 
+@app.route('/api/admin/reset', methods=['POST'])
+@login_required
+@admin_required
+def api_admin_reset():
+    data = request.get_json() or {}
+    if data.get('confirm') != 'RESET':
+        return jsonify({'error': 'Gõ RESET để xác nhận'}), 400
+    conn = get_db()
+    cur = conn.cursor()
+    for tbl in ('task_assignments', 'task_dependencies', 'subtasks', 'comments', 'time_logs',
+                'attachments', 'points_log', 'login_history', 'automation_rules', 'webhooks',
+                'shares', 'finance', 'tasks'):
+        try:
+            cur.execute(f"DELETE FROM {tbl}")
+        except Exception:
+            pass
+    cur.execute(q("UPDATE users SET score = 0 WHERE role = %s", "UPDATE users SET score = 0 WHERE role = ?"), ('bithu',))
+    cur.execute(q("UPDATE fund SET balance = 0 WHERE id = %s", "UPDATE fund SET balance = 0 WHERE id = ?"),
+                (get_fund(conn)['id'],))
+    cur.execute(q("DELETE FROM users WHERE role != %s OR role IS NULL",
+                  "DELETE FROM users WHERE role != ? OR role IS NULL"), ('bithu',))
+    conn.commit()
+    kept = cur.execute(q("SELECT username FROM users WHERE role = %s",
+                         "SELECT username FROM users WHERE role = ?"), ('bithu',)).fetchall()
+    conn.close()
+    return jsonify({'message': 'Đã reset hệ thống', 'kept': [dict(u)['username'] for u in kept]})
+
+
 @app.route('/api/storage')
 @login_required
 def api_storage():
