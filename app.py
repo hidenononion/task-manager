@@ -190,6 +190,14 @@ def init_db():
                 created_at TEXT DEFAULT (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')
             )
         ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS recovery_codes (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                code_hash TEXT NOT NULL,
+                used INTEGER DEFAULT 0
+            )
+        ''')
     else:
         cur.executescript('''
             CREATE TABLE IF NOT EXISTS users (
@@ -324,6 +332,13 @@ def init_db():
                 created_by INTEGER,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (created_by) REFERENCES users(id)
+            );
+            CREATE TABLE IF NOT EXISTS recovery_codes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                code_hash TEXT NOT NULL,
+                used INTEGER DEFAULT 0,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
         ''')
 
@@ -586,6 +601,16 @@ def api_login():
         pending = session.get('pending_2fa')
         if code and pending == u['id'] and totp_verify(u.get('twofa_secret') or '', code):
             pass
+        elif code and pending == u['id']:
+            row = cur.execute(q("SELECT id FROM recovery_codes WHERE user_id = %s AND code_hash = %s AND used = 0",
+                                "SELECT id FROM recovery_codes WHERE user_id = ? AND code_hash = ? AND used = 0"),
+                              (u['id'], hash_password(code.upper().strip()))).fetchone()
+            if not row:
+                conn.close()
+                return jsonify({'error': 'Mã 2FA không đúng'}), 401
+            cur.execute(q("UPDATE recovery_codes SET used = 1 WHERE id = %s",
+                          "UPDATE recovery_codes SET used = 1 WHERE id = ?"), (dict(row)['id'],))
+            conn.commit()
         elif code:
             conn.close()
             return jsonify({'error': 'Mã 2FA không đúng'}), 401
@@ -833,10 +858,17 @@ def api_2fa_enable():
     cur.execute(q("UPDATE users SET twofa_enabled = 1, twofa_secret = %s WHERE id = %s",
                   "UPDATE users SET twofa_enabled = 1, twofa_secret = ? WHERE id = ?"),
                 (secret, session['user_id']))
+    cur.execute(q("DELETE FROM recovery_codes WHERE user_id = %s",
+                  "DELETE FROM recovery_codes WHERE user_id = ?"), (session['user_id'],))
+    codes = ['%s-%s' % (secrets.token_hex(2).upper(), secrets.token_hex(2).upper()) for _ in range(8)]
+    for cd in codes:
+        cur.execute(q("INSERT INTO recovery_codes (user_id, code_hash) VALUES (%s, %s)",
+                      "INSERT INTO recovery_codes (user_id, code_hash) VALUES (?, ?)"),
+                    (session['user_id'], hash_password(cd)))
     conn.commit()
     conn.close()
     session.pop('pending_2fa_secret', None)
-    return jsonify({'message': 'Đã bật 2FA'})
+    return jsonify({'message': 'Đã bật 2FA', 'recovery_codes': codes})
 
 
 @app.route('/api/2fa/disable', methods=['POST'])

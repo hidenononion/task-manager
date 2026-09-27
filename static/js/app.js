@@ -926,6 +926,10 @@ async function enable2FA() {
     const data = await res.json();
     if (!res.ok) { showToast(data.error || 'Lỗi', 'error'); return; }
     currentUser.twofa_enabled = 1; fillSettings(); showToast('Đã bật 2FA', 'success');
+    if (data.recovery_codes) {
+        document.getElementById('twofaSetupBox').innerHTML =
+            `<div style="font-size:13px;margin-bottom:6px;color:var(--danger);"><strong>${curLang() === 'en' ? 'Backup codes (save now, each works once):' : 'Mã dự phòng (lưu ngay, mỗi mã dùng 1 lần):'}</strong><br><code>${data.recovery_codes.join('<br>')}</code></div>`;
+    }
 }
 async function disable2FA() {
     const res = await fetch('/api/2fa/disable', { method: 'POST' });
