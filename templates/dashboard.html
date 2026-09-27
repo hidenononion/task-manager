@@ -344,18 +344,6 @@
                 </div>
                 <button class="btn btn-primary" onclick="changePassword()" data-i18n="change_pass_btn">Đổi mật khẩu</button>
                 <hr style="margin:20px 0;border-color:var(--border);">
-                <h3 data-i18n="tfa">Xác thực 2 yếu tố (2FA)</h3>
-                <p style="color:var(--text-secondary);font-size:13px;"><span data-i18n="tfa_status">Trạng thái:</span> <strong id="twofaStatus">Tắt</strong></p>
-                <div id="twofaSetupBox" style="display:none;background:var(--bg-glass);border:1px solid var(--border);border-radius:12px;padding:12px;margin:10px 0;">
-                    <div style="font-size:13px;margin-bottom:6px;">Secret: <code id="twofaSecret"></code></div>
-                    <div class="form-group"><label data-i18n="tfa_code_lbl">Nhập mã 6 số từ app Authenticator</label><input type="text" id="twofaCode" maxlength="6" inputmode="numeric"></div>
-                    <button class="btn btn-primary" onclick="enable2FA()" data-i18n="tfa_confirm">Xác nhận bật 2FA</button>
-                </div>
-                <div style="display:flex;gap:8px;margin-top:8px;">
-                    <button class="btn btn-secondary" onclick="setup2FA()" data-i18n="tfa_gen">Tạo mã 2FA</button>
-                    <button class="btn btn-secondary" onclick="disable2FA()" data-i18n="tfa_off">Tắt 2FA</button>
-                </div>
-                <hr style="margin:20px 0;border-color:var(--border);">
                 <h3 data-i18n="login_hist">Lịch sử đăng nhập / Thiết bị</h3>
                 <table class="task-table">
                     <thead><tr><th data-i18n="th_time">Thời gian</th><th data-i18n="th_ip">IP</th><th data-i18n="th_device">Thiết bị</th><th></th></tr></thead>

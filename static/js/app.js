@@ -528,7 +528,7 @@ async function loadUsersList() {
                 <td><div style="display:flex;gap:4px;"><input type="text" value="${escapeHtml(u.title || '')}" id="title-${u.id}" placeholder="${t('th_title_col')}" style="width:120px;"><button class="btn btn-sm btn-secondary" onclick="updateUserTitle(${u.id})">${t('save')}</button></div></td>
                 <td><select class="status-select" onchange="updateUserRole(${u.id}, this.value)">${roleOptions}</select></td>
                 <td>${u.score || 0}</td>
-                <td><button class="btn-icon" onclick="delUser(${u.id}, '${escapeHtml(u.username)}')" title="Xóa">&#10005;</button> <button class="btn btn-sm btn-secondary" onclick="resetUser2FA(${u.id}, '${escapeHtml(u.username)}')" title="Tắt 2FA">2FA</button></td>            </tr>`;
+                <td><button class="btn-icon" onclick="delUser(${u.id}, '${escapeHtml(u.username)}')" title="Xóa">&#10005;</button></td>            </tr>`;
         }).join('');
     } catch (err) { showToast('Lỗi tải danh sách user', 'error'); }
 }
@@ -568,16 +568,6 @@ async function delUser(userId, username) {
         const data = await res.json();
         if (!res.ok) { showToast(data.error || 'Lỗi xóa', 'error'); return; }
         loadUsersList(); loadUsers(); showToast(data.message, 'success');
-    } catch (err) { showToast('Lỗi kết nối', 'error'); }
-}
-
-async function resetUser2FA(userId, username) {
-    if (!confirm(`${t('tfa_off')} "${username}"?`)) return;
-    try {
-        const res = await fetch(`/api/users/${userId}/2fa-reset`, { method: 'POST' });
-        const data = await res.json();
-        if (!res.ok) { showToast(data.error || 'Lỗi', 'error'); return; }
-        showToast(data.message, 'success');
     } catch (err) { showToast('Lỗi kết nối', 'error'); }
 }
 
@@ -623,8 +613,6 @@ vi: {
     profile_h: 'Thông tin cá nhân', lbl_name: 'Họ tên', lbl_dept: 'Phòng ban', lbl_phone: 'Số điện thoại', lbl_email: 'Email liên hệ',
     lbl_avatar: 'Avatar (URL)', lbl_title_ro: 'Chức danh (chỉ Bí thư đổi)', save_profile: 'Lưu hồ sơ',
     sec_pass: 'Đổi mật khẩu', old_pass: 'Mật khẩu cũ', new_pass: 'Mật khẩu mới', change_pass_btn: 'Đổi mật khẩu',
-    tfa: 'Xác thực 2 yếu tố (2FA)', tfa_status: 'Trạng thái:', on: 'Bật', off: 'Tắt',
-    tfa_code_lbl: 'Nhập mã 6 số từ app Authenticator', tfa_confirm: 'Xác nhận bật 2FA', tfa_gen: 'Tạo mã 2FA', tfa_off: 'Tắt 2FA',
     login_hist: 'Lịch sử đăng nhập / Thiết bị',
     disp_h: 'Chế độ hiển thị', lbl_theme: 'Theme', theme_dark: 'Tối', theme_light: 'Sáng', theme_sys: 'Theo hệ thống',
     lbl_default_view: 'Giao diện công việc mặc định', lbl_lang: 'Ngôn ngữ', lbl_tz: 'Múi giờ',
@@ -680,8 +668,6 @@ en: {
     profile_h: 'Personal info', lbl_name: 'Full name', lbl_dept: 'Department', lbl_phone: 'Phone', lbl_email: 'Contact email',
     lbl_avatar: 'Avatar (URL)', lbl_title_ro: 'Title (Secretary only)', save_profile: 'Save profile',
     sec_pass: 'Change password', old_pass: 'Old password', new_pass: 'New password', change_pass_btn: 'Change password',
-    tfa: 'Two-factor auth (2FA)', tfa_status: 'Status:', on: 'On', off: 'Off',
-    tfa_code_lbl: 'Enter 6-digit code from Authenticator app', tfa_confirm: 'Confirm enable 2FA', tfa_gen: 'Generate 2FA', tfa_off: 'Disable 2FA',
     login_hist: 'Login history / Devices',
     disp_h: 'Display mode', lbl_theme: 'Theme', theme_dark: 'Dark', theme_light: 'Light', theme_sys: 'System',
     lbl_default_view: 'Default task view', lbl_lang: 'Language', lbl_tz: 'Timezone',
@@ -805,7 +791,6 @@ function fillSettings() {
     const set2 = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
     set2('intSlack', currentUser.slack_url); set2('intTeams', currentUser.teams_url);
     set2('intGithub', currentUser.github_repo); set2('setSkills', currentUser.skills);
-    const st = document.getElementById('twofaStatus'); if (st) st.textContent = currentUser.twofa_enabled ? t('on') : t('off');
     if (currentUser.avatar) document.getElementById('userAvatar').textContent = (currentUser.full_name || currentUser.username)[0].toUpperCase();
     localStorage.setItem('date_format', currentUser.date_format || 'DD/MM/YYYY');
     localStorage.setItem('time_format', currentUser.time_format || '24h');
@@ -913,28 +898,6 @@ async function changePassword() {
     document.getElementById('oldPass').value = ''; document.getElementById('newPass').value = '';
 }
 
-async function setup2FA() {
-    const res = await fetch('/api/2fa/setup', { method: 'POST' });
-    const data = await res.json();
-    document.getElementById('twofaSetupBox').style.display = 'block';
-    document.getElementById('twofaSecret').textContent = data.secret;
-    showToast(curLang() === 'en' ? 'New code takes effect only after confirm' : 'Mã mới chỉ có hiệu lực sau khi xác nhận', 'info');
-}
-async function enable2FA() {
-    const res = await fetch('/api/2fa/enable', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: document.getElementById('twofaCode').value }) });
-    const data = await res.json();
-    if (!res.ok) { showToast(data.error || 'Lỗi', 'error'); return; }
-    currentUser.twofa_enabled = 1; fillSettings(); showToast('Đã bật 2FA', 'success');
-    if (data.recovery_codes) {
-        document.getElementById('twofaSetupBox').innerHTML =
-            `<div style="font-size:13px;margin-bottom:6px;color:var(--danger);"><strong>${curLang() === 'en' ? 'Backup codes (save now, each works once):' : 'Mã dự phòng (lưu ngay, mỗi mã dùng 1 lần):'}</strong><br><code>${data.recovery_codes.join('<br>')}</code></div>`;
-    }
-}
-async function disable2FA() {
-    const res = await fetch('/api/2fa/disable', { method: 'POST' });
-    await res.json(); currentUser.twofa_enabled = 0; fillSettings(); showToast('Đã tắt 2FA', 'success');
-}
 async function loadLoginHistory() {
     try {
         const res = await fetch('/api/login-history');

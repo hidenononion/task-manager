@@ -1,12 +1,8 @@
 import os
-import base64
 import csv
 import hashlib
-import hmac
 import io
 import secrets
-import struct
-import time
 from datetime import datetime
 from functools import wraps
 from flask import (  # pyright: ignore[reportMissingImports]
@@ -190,14 +186,6 @@ def init_db():
                 created_at TEXT DEFAULT (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')
             )
         ''')
-        cur.execute('''
-            CREATE TABLE IF NOT EXISTS recovery_codes (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                code_hash TEXT NOT NULL,
-                used INTEGER DEFAULT 0
-            )
-        ''')
     else:
         cur.executescript('''
             CREATE TABLE IF NOT EXISTS users (
@@ -333,13 +321,6 @@ def init_db():
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (created_by) REFERENCES users(id)
             );
-            CREATE TABLE IF NOT EXISTS recovery_codes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                code_hash TEXT NOT NULL,
-                used INTEGER DEFAULT 0,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            );
         ''')
 
     admin = cur.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()
@@ -458,23 +439,6 @@ def ensure_column(cur, table, column, pg_type):
             cur.execute(f'ALTER TABLE {table} ADD COLUMN {column} {lite_type}')
 
 
-def totp_verify(secret_b32, code, window=1):
-    try:
-        key = base64.b32decode(secret_b32, casefold=True)
-        code = str(code).strip()
-        t = int(time.time()) // 30
-        for offset in range(-window, window + 1):
-            msg = struct.pack('>Q', t + offset)
-            h = hmac.new(key, msg, hashlib.sha1).digest()
-            o = h[-1] & 0x0F
-            token = (struct.unpack('>I', h[o:o + 4])[0] & 0x7FFFFFFF) % 1000000
-            if f'{token:06d}' == code:
-                return True
-        return False
-    except Exception:
-        return False
-
-
 def post_json_best_effort(url, payload):
     try:
         import json as _json
@@ -584,7 +548,6 @@ def api_login():
     data = request.get_json() or {}
     username = data.get('username', '').strip()
     password = data.get('password', '').strip()
-    code = str(data.get('code', '') or '').strip()
 
     conn = get_db()
     cur = conn.cursor()
@@ -597,29 +560,6 @@ def api_login():
         return jsonify({'error': 'Sai username hoặc password'}), 401
 
     u = dict(user)
-    if u.get('twofa_enabled'):
-        pending = session.get('pending_2fa')
-        if code and pending == u['id'] and totp_verify(u.get('twofa_secret') or '', code):
-            pass
-        elif code and pending == u['id']:
-            row = cur.execute(q("SELECT id FROM recovery_codes WHERE user_id = %s AND code_hash = %s AND used = 0",
-                                "SELECT id FROM recovery_codes WHERE user_id = ? AND code_hash = ? AND used = 0"),
-                              (u['id'], hash_password(code.upper().strip()))).fetchone()
-            if not row:
-                conn.close()
-                return jsonify({'error': 'Mã 2FA không đúng'}), 401
-            cur.execute(q("UPDATE recovery_codes SET used = 1 WHERE id = %s",
-                          "UPDATE recovery_codes SET used = 1 WHERE id = ?"), (dict(row)['id'],))
-            conn.commit()
-        elif code:
-            conn.close()
-            return jsonify({'error': 'Mã 2FA không đúng'}), 401
-        else:
-            session['pending_2fa'] = u['id']
-            conn.close()
-            return jsonify({'need_2fa': True, 'message': 'Nhập mã 2FA'}), 200
-
-    session.pop('pending_2fa', None)
     session['user_id'] = u['id']
     session['username'] = u['username']
     session['role'] = u['role']
@@ -747,19 +687,6 @@ def api_delete_user(user_id):
     return jsonify({'message': 'Đã xóa tài khoản'})
 
 
-@app.route('/api/users/<int:user_id>/2fa-reset', methods=['POST'])
-@login_required
-@admin_required
-def api_user_2fa_reset(user_id):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(q("UPDATE users SET twofa_enabled = 0, twofa_secret = '' WHERE id = %s",
-                  "UPDATE users SET twofa_enabled = 0, twofa_secret = '' WHERE id = ?"), (user_id,))
-    conn.commit()
-    conn.close()
-    return jsonify({'message': 'Đã tắt 2FA cho tài khoản'})
-
-
 # ==================== SETTINGS API ====================
 
 PROFILE_FIELDS = ['full_name', 'avatar', 'department', 'phone', 'email']
@@ -769,7 +696,7 @@ PREF_FIELDS = ['theme', 'language', 'timezone', 'date_format', 'time_format', 'd
                'cal_google', 'cal_outlook', 'store_drive', 'store_onedrive', 'store_dropbox',
                'auto_done_unfollow', 'auto_overdue_warn']
 INT_FIELDS = {'cal_google', 'cal_outlook', 'store_drive', 'store_onedrive', 'store_dropbox',
-              'auto_done_unfollow', 'auto_overdue_warn', 'twofa_enabled'}
+              'auto_done_unfollow', 'auto_overdue_warn'}
 
 
 @app.route('/api/profile', methods=['PUT'])
@@ -824,63 +751,6 @@ def api_change_password():
     conn.commit()
     conn.close()
     return jsonify({'message': 'Đã đổi mật khẩu'})
-
-
-@app.route('/api/2fa/setup', methods=['POST'])
-@login_required
-def api_2fa_setup():
-    secret = base64.b32encode(secrets.token_bytes(20)).decode().replace('=', '')
-    session['pending_2fa_secret'] = secret
-    conn = get_db()
-    user = conn.cursor().execute(q("SELECT username FROM users WHERE id = %s", "SELECT username FROM users WHERE id = ?"),
-                                 (session['user_id'],)).fetchone()
-    conn.close()
-    label = dict(user)['username'] if user else 'user'
-    otpauth = f"otpauth://totp/LamKhe:{label}?secret={secret}&issuer=LamKhe"
-    return jsonify({'secret': secret, 'otpauth_url': otpauth})
-
-
-@app.route('/api/2fa/enable', methods=['POST'])
-@login_required
-def api_2fa_enable():
-    data = request.get_json() or {}
-    code = str(data.get('code', ''))
-    secret = session.get('pending_2fa_secret') or ''
-    conn = get_db()
-    cur = conn.cursor()
-    if not secret:
-        user = cur.execute(q("SELECT * FROM users WHERE id = %s", "SELECT * FROM users WHERE id = ?"),
-                           (session['user_id'],)).fetchone()
-        secret = dict(user).get('twofa_secret') or ''
-    if not totp_verify(secret, code):
-        conn.close()
-        return jsonify({'error': 'Mã xác thực không đúng'}), 400
-    cur.execute(q("UPDATE users SET twofa_enabled = 1, twofa_secret = %s WHERE id = %s",
-                  "UPDATE users SET twofa_enabled = 1, twofa_secret = ? WHERE id = ?"),
-                (secret, session['user_id']))
-    cur.execute(q("DELETE FROM recovery_codes WHERE user_id = %s",
-                  "DELETE FROM recovery_codes WHERE user_id = ?"), (session['user_id'],))
-    codes = ['%s-%s' % (secrets.token_hex(2).upper(), secrets.token_hex(2).upper()) for _ in range(8)]
-    for cd in codes:
-        cur.execute(q("INSERT INTO recovery_codes (user_id, code_hash) VALUES (%s, %s)",
-                      "INSERT INTO recovery_codes (user_id, code_hash) VALUES (?, ?)"),
-                    (session['user_id'], hash_password(cd)))
-    conn.commit()
-    conn.close()
-    session.pop('pending_2fa_secret', None)
-    return jsonify({'message': 'Đã bật 2FA', 'recovery_codes': codes})
-
-
-@app.route('/api/2fa/disable', methods=['POST'])
-@login_required
-def api_2fa_disable():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(q("UPDATE users SET twofa_enabled = 0, twofa_secret = '' WHERE id = %s",
-                  "UPDATE users SET twofa_enabled = 0, twofa_secret = '' WHERE id = ?"), (session['user_id'],))
-    conn.commit()
-    conn.close()
-    return jsonify({'message': 'Đã tắt 2FA'})
 
 
 @app.route('/api/login-history')
