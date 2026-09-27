@@ -722,6 +722,19 @@ def api_delete_user(user_id):
     return jsonify({'message': 'Đã xóa tài khoản'})
 
 
+@app.route('/api/users/<int:user_id>/2fa-reset', methods=['POST'])
+@login_required
+@admin_required
+def api_user_2fa_reset(user_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(q("UPDATE users SET twofa_enabled = 0, twofa_secret = '' WHERE id = %s",
+                  "UPDATE users SET twofa_enabled = 0, twofa_secret = '' WHERE id = ?"), (user_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã tắt 2FA cho tài khoản'})
+
+
 # ==================== SETTINGS API ====================
 
 PROFILE_FIELDS = ['full_name', 'avatar', 'department', 'phone', 'email']
@@ -792,16 +805,11 @@ def api_change_password():
 @login_required
 def api_2fa_setup():
     secret = base64.b32encode(secrets.token_bytes(20)).decode().replace('=', '')
+    session['pending_2fa_secret'] = secret
     conn = get_db()
-    cur = conn.cursor()
-    cur.execute(q("UPDATE users SET twofa_secret = %s WHERE id = %s",
-                  "UPDATE users SET twofa_secret = ? WHERE id = ?"), (secret, session['user_id']))
-    conn.commit()
+    user = conn.cursor().execute(q("SELECT username FROM users WHERE id = %s", "SELECT username FROM users WHERE id = ?"),
+                                 (session['user_id'],)).fetchone()
     conn.close()
-    conn2 = get_db()
-    user = conn2.cursor().execute(q("SELECT username FROM users WHERE id = %s", "SELECT username FROM users WHERE id = ?"),
-                                  (session['user_id'],)).fetchone()
-    conn2.close()
     label = dict(user)['username'] if user else 'user'
     otpauth = f"otpauth://totp/LamKhe:{label}?secret={secret}&issuer=LamKhe"
     return jsonify({'secret': secret, 'otpauth_url': otpauth})
@@ -812,18 +820,22 @@ def api_2fa_setup():
 def api_2fa_enable():
     data = request.get_json() or {}
     code = str(data.get('code', ''))
+    secret = session.get('pending_2fa_secret') or ''
     conn = get_db()
     cur = conn.cursor()
-    user = cur.execute(q("SELECT * FROM users WHERE id = %s", "SELECT * FROM users WHERE id = ?"),
-                       (session['user_id'],)).fetchone()
-    u = dict(user)
-    if not totp_verify(u.get('twofa_secret') or '', code):
+    if not secret:
+        user = cur.execute(q("SELECT * FROM users WHERE id = %s", "SELECT * FROM users WHERE id = ?"),
+                           (session['user_id'],)).fetchone()
+        secret = dict(user).get('twofa_secret') or ''
+    if not totp_verify(secret, code):
         conn.close()
         return jsonify({'error': 'Mã xác thực không đúng'}), 400
-    cur.execute(q("UPDATE users SET twofa_enabled = 1 WHERE id = %s", "UPDATE users SET twofa_enabled = 1 WHERE id = ?"),
-                (session['user_id'],))
+    cur.execute(q("UPDATE users SET twofa_enabled = 1, twofa_secret = %s WHERE id = %s",
+                  "UPDATE users SET twofa_enabled = 1, twofa_secret = ? WHERE id = ?"),
+                (secret, session['user_id']))
     conn.commit()
     conn.close()
+    session.pop('pending_2fa_secret', None)
     return jsonify({'message': 'Đã bật 2FA'})
 
 

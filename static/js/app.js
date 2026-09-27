@@ -528,8 +528,7 @@ async function loadUsersList() {
                 <td><div style="display:flex;gap:4px;"><input type="text" value="${escapeHtml(u.title || '')}" id="title-${u.id}" placeholder="${t('th_title_col')}" style="width:120px;"><button class="btn btn-sm btn-secondary" onclick="updateUserTitle(${u.id})">${t('save')}</button></div></td>
                 <td><select class="status-select" onchange="updateUserRole(${u.id}, this.value)">${roleOptions}</select></td>
                 <td>${u.score || 0}</td>
-                <td><button class="btn-icon" onclick="delUser(${u.id}, '${escapeHtml(u.username)}')" title="Xóa">&#10005;</button></td>
-            </tr>`;
+                <td><button class="btn-icon" onclick="delUser(${u.id}, '${escapeHtml(u.username)}')" title="Xóa">&#10005;</button> <button class="btn btn-sm btn-secondary" onclick="resetUser2FA(${u.id}, '${escapeHtml(u.username)}')" title="Tắt 2FA">2FA</button></td>            </tr>`;
         }).join('');
     } catch (err) { showToast('Lỗi tải danh sách user', 'error'); }
 }
@@ -569,6 +568,16 @@ async function delUser(userId, username) {
         const data = await res.json();
         if (!res.ok) { showToast(data.error || 'Lỗi xóa', 'error'); return; }
         loadUsersList(); loadUsers(); showToast(data.message, 'success');
+    } catch (err) { showToast('Lỗi kết nối', 'error'); }
+}
+
+async function resetUser2FA(userId, username) {
+    if (!confirm(`${t('tfa_off')} "${username}"?`)) return;
+    try {
+        const res = await fetch(`/api/users/${userId}/2fa-reset`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) { showToast(data.error || 'Lỗi', 'error'); return; }
+        showToast(data.message, 'success');
     } catch (err) { showToast('Lỗi kết nối', 'error'); }
 }
 
@@ -909,7 +918,7 @@ async function setup2FA() {
     const data = await res.json();
     document.getElementById('twofaSetupBox').style.display = 'block';
     document.getElementById('twofaSecret').textContent = data.secret;
-    showToast('Quét secret vào app Authenticator', 'info');
+    showToast(curLang() === 'en' ? 'New code takes effect only after confirm' : 'Mã mới chỉ có hiệu lực sau khi xác nhận', 'info');
 }
 async function enable2FA() {
     const res = await fetch('/api/2fa/enable', { method: 'POST', headers: { 'Content-Type': 'application/json' },
