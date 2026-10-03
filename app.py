@@ -5,12 +5,32 @@ import io
 import secrets
 from datetime import datetime
 from functools import wraps
+
 from flask import (  # pyright: ignore[reportMissingImports]
     Flask, request, jsonify, session, render_template, redirect, url_for, Response
 )
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dtnlamkhe-secret-change-in-production')
+
+# ─── Load environment variables ───────────────────────────────────────
+
+
+# Fallback: if Google credentials not set, try gg.env
+if not os.getenv('GOOGLE_CLIENT_ID'):
+    gg_path = os.path.join(os.path.dirname(__file__), 'gg.env')
+    if os.path.isfile(gg_path):
+        with open(gg_path, encoding='utf-8') as _f:
+            for _line in _f:
+                _line = _line.strip()
+                if not _line or _line.startswith('#'):
+                    continue
+                _key, _, _val = _line.partition('=')
+                _k = _key.strip()
+                if _k in ('GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'):
+                    os.environ.setdefault(_k, _val.strip())
+# ─────────────────────────────────────────────────────────────────────────
+
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 
@@ -491,6 +511,10 @@ def run_automation(conn, event, task):
 @app.route('/health')
 def health():
     return {'status': 'ok'}, 200
+
+@app.route('/favicon.ico')
+def favicon():
+    return app.send_static_file('images/favicon.png')
 
 @app.route('/')
 def index():
