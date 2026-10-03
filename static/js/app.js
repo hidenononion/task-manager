@@ -20,7 +20,7 @@ async function loadUser() {
         if (!res.ok) { window.location.href = '/login'; return; }
         currentUser = await res.json();
         document.getElementById('userName').textContent = currentUser.full_name || currentUser.username;
-document.getElementById('userAvatar').innerHTML = currentUser.avatar ? `<img src="${currentUser.avatar}" alt="Avatar" class="avatar-img">` : (currentUser.full_name || currentUser.username)[0].toUpperCase();
+document.getElementById('userAvatar').innerHTML = currentUser.avatar ? `<img src="${currentUser.avatar}" alt="Avatar" class="avatar-img" onerror="this.parentElement.innerHTML='${(currentUser.full_name || currentUser.username)[0].toUpperCase()}'">` : (currentUser.full_name || currentUser.username)[0].toUpperCase();
         const roleEl = document.getElementById('userRole');
         roleEl.textContent = currentUser.role === 'bithu' ? t('role_bithu') : t('role_user');
         if (currentUser.role === 'bithu') roleEl.classList.add('badge-admin');
@@ -791,7 +791,7 @@ function fillSettings() {
     const set2 = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
     set2('intSlack', currentUser.slack_url); set2('intTeams', currentUser.teams_url);
     set2('intGithub', currentUser.github_repo); set2('setSkills', currentUser.skills);
-    if (currentUser.avatar) document.getElementById('userAvatar').innerHTML = `<img src="${currentUser.avatar}" alt="Avatar" class="avatar-img">`; else document.getElementById('userAvatar').textContent = (currentUser.full_name || currentUser.username)[0].toUpperCase();
+    if (currentUser.avatar) document.getElementById('userAvatar').innerHTML = `<img src="${currentUser.avatar}" alt="Avatar" class="avatar-img" onerror="this.parentElement.innerHTML='${(currentUser.full_name || currentUser.username)[0].toUpperCase()}'">`; else document.getElementById('userAvatar').textContent = (currentUser.full_name || currentUser.username)[0].toUpperCase();
     localStorage.setItem('date_format', currentUser.date_format || 'DD/MM/YYYY');
     localStorage.setItem('time_format', currentUser.time_format || '24h');
     if (!localStorage.getItem('theme') && currentUser.theme) {
