@@ -1007,7 +1007,7 @@ async function addWebhook() {
 }
 async function delWebhook(id) { await fetch(`/api/webhooks/${id}`, { method: 'DELETE' }); loadWebhooks(); }
 function exportCSV(kind) { window.location.href = `/api/export/${kind}`; }
-async function importTasks() {
+async function importCsvTasks() {
     const res = await fetch('/api/import/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ csv: document.getElementById('importCsv').value }) });
     const data = await res.json();
