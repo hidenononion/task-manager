@@ -1165,6 +1165,62 @@ def api_create_task():
     return jsonify(result), 201
 
 
+@app.route('/api/tasks/import', methods=['POST'])
+@login_required
+@admin_required
+def api_import_tasks_file():
+    if 'file' not in request.files:
+        return jsonify({'error': 'Không có file'}), 400
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'error': 'Chưa chọn file'}), 400
+
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in ('pdf', 'doc', 'docx'):
+        return jsonify({'error': 'Chỉ hỗ trợ file .pdf, .doc, .docx'}), 400
+
+    try:
+        if ext == 'pdf':
+            import PyPDF2
+            reader = PyPDF2.PdfReader(file)
+            text = '\n'.join(page.extract_text() or '' for page in reader.pages)
+        else:
+            import docx
+            doc = docx.Document(file)
+            text = '\n'.join(p.text for p in doc.paragraphs)
+    except Exception as e:
+        return jsonify({'error': f'Không đọc được file: {str(e)}'}), 400
+
+    if not text.strip():
+        return jsonify({'error': 'File không có nội dung'}), 400
+
+    scope = request.form.get('scope', 'lang') if request.form.get('scope') in ('lang', 'xa') else 'lang'
+    priority = request.form.get('priority', 'medium') if request.form.get('priority') in ('low', 'medium', 'high', 'urgent') else 'medium'
+
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    tasks_created = []
+    conn = get_db()
+    cur = conn.cursor()
+    for line in lines:
+        title = line.lstrip('•-*–—>1234567890.) ').strip()
+        if len(title) < 3:
+            continue
+        if len(title) > 500:
+            title = title[:500]
+        cur.execute(q(
+            "INSERT INTO tasks (title, description, status, priority, max_assignees, scope, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+            "INSERT INTO tasks (title, description, status, priority, max_assignees, scope, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)"),
+            (title, '', 'pending', priority, 3, scope, session['user_id']))
+        tid = cur.fetchone()['id'] if is_pg() else cur.lastrowid
+        tasks_created.append({'id': tid, 'title': title})
+    conn.commit()
+    conn.close()
+
+    if not tasks_created:
+        return jsonify({'error': 'Không tìm thấy nhiệm vụ nào trong file'}), 400
+    return jsonify({'message': f'Đã import {len(tasks_created)} nhiệm vụ', 'tasks': tasks_created}), 201
+
+
 @app.route('/api/tasks/<int:task_id>', methods=['PUT'])
 @login_required
 @admin_required

@@ -31,6 +31,9 @@ document.getElementById('userAvatar').innerHTML = currentUser.avatar ? `<img src
         if (document.getElementById('addTaskBtn')) {
             document.getElementById('addTaskBtn').style.display = isAdminOrBithu ? 'inline-flex' : 'none';
         }
+        if (document.getElementById('importTaskBtn')) {
+            document.getElementById('importTaskBtn').style.display = isAdminOrBithu ? 'inline-flex' : 'none';
+        }
         fillSettings();
         applyLang(localStorage.getItem('lang') || currentUser.language || 'vi');
         if (currentUser.default_view && (currentView === 'kanban')) {
@@ -464,6 +467,33 @@ function closeTaskModal() { document.getElementById('taskModal').classList.remov
 function openEditModal(taskId) { openTaskModal(taskId); }
 function openDeleteModal(taskId, title) { deleteTaskId = taskId; document.getElementById('deleteTaskName').textContent = title; document.getElementById('deleteModal').classList.add('active'); }
 function closeDeleteModal() { document.getElementById('deleteModal').classList.remove('active'); deleteTaskId = null; }
+
+function openImportModal() {
+    document.getElementById('importFile').value = '';
+    document.getElementById('importResult').textContent = '';
+    document.getElementById('importModal').classList.add('active');
+}
+function closeImportModal() { document.getElementById('importModal').classList.remove('active'); }
+
+async function importTasks() {
+    const fileInput = document.getElementById('importFile');
+    const resultEl = document.getElementById('importResult');
+    if (!fileInput.files.length) { resultEl.innerHTML = '<span style="color:var(--danger)">Chưa chọn file</span>'; return; }
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    formData.append('scope', document.getElementById('importScope').value);
+    formData.append('priority', document.getElementById('importPriority').value);
+    resultEl.innerHTML = 'Đang import...';
+    try {
+        const res = await fetch('/api/tasks/import', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (!res.ok) { resultEl.innerHTML = `<span style="color:var(--danger)">${data.error || 'Lỗi'}</span>`; return; }
+        resultEl.innerHTML = `<span style="color:var(--success)">${data.message}</span>`;
+        await loadTasks();
+        showToast(data.message, 'success');
+        setTimeout(closeImportModal, 1500);
+    } catch (e) { resultEl.innerHTML = '<span style="color:var(--danger)">Lỗi kết nối server</span>'; }
+}
 
 async function saveTask() {
     const errorEl = document.getElementById('taskFormError');
