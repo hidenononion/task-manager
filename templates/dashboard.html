@@ -157,7 +157,9 @@
                         <button class="btn btn-sm btn-secondary" onclick="bulkSetStatus('in_progress')">Đang làm</button>
                         <button class="btn btn-sm btn-secondary" onclick="bulkSetStatus('done')">Hoàn thành</button>
                         <button class="btn btn-sm btn-primary" onclick="bulkClaim()">Nhận hết (M)</button>
+                        <button class="btn btn-sm btn-danger" onclick="bulkDelete()">🗑 Xóa đã chọn</button>
                     </span>
+                    <button class="btn btn-sm btn-danger admin-only" onclick="deleteAllTasks()" style="display:none;margin-left:8px;">🗑 Xóa tất cả</button>
                 </div>
             </div>
             <table class="task-table">

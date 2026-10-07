@@ -1524,9 +1524,29 @@ def api_tasks_bulk():
                               "INSERT INTO task_assignments (task_id, user_id) VALUES (?, ?)"), (tid, session['user_id']))
             except Exception:
                 pass
+    if data.get('delete'):
+        cur.execute(f"UPDATE tasks SET deleted_at = NOW() WHERE id IN ({ph})" if is_pg()
+                    else f"UPDATE tasks SET deleted_at = CURRENT_TIMESTAMP WHERE id IN ({ph})", ids)
+        conn.commit()
+        conn.close()
+        return jsonify({'message': f'Đã chuyển {len(ids)} task vào thùng rác'})
     conn.commit()
     conn.close()
     return jsonify({'message': f'Đã cập nhật {len(ids)} task'})
+
+
+@app.route('/api/tasks', methods=['DELETE'])
+@login_required
+@admin_required
+def api_delete_all_tasks():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(q("UPDATE tasks SET deleted_at = NOW() WHERE deleted_at IS NULL",
+                  "UPDATE tasks SET deleted_at = CURRENT_TIMESTAMP WHERE deleted_at IS NULL"))
+    count = cur.rowcount
+    conn.commit()
+    conn.close()
+    return jsonify({'message': f'Đã chuyển {count} task vào thùng rác'})
 
 
 # ==================== WORKLOAD / GAMIFICATION ====================

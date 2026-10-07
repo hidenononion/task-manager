@@ -1292,6 +1292,22 @@ async function bulkClaim() {
     await fetch('/api/tasks/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [...bulkSet], claim_me: true }) });
     bulkSet.clear(); await loadTasks(); renderList(getFilteredTasks()); showToast('Đã nhận', 'success');
 }
+async function bulkDelete() {
+    if (!bulkSet.size) { showToast('Chưa chọn task', 'error'); return; }
+    if (!confirm(`Xóa ${bulkSet.size} task đã chọn? (vào thùng rác)`)) return;
+    const res = await fetch('/api/tasks/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [...bulkSet], delete: true }) });
+    const d = await res.json();
+    if (!res.ok) { showToast(d.error || 'Lỗi', 'error'); return; }
+    bulkSet.clear(); await loadTasks(); renderList(getFilteredTasks()); showToast(d.message, 'success');
+}
+async function deleteAllTasks() {
+    if (!confirm('XÓA TẤT CẢ task? (vào thùng rác, có thể khôi phục trong 30 ngày)')) return;
+    if (!confirm('Xác nhận lần 2: bạn chắc chắn muốn xóa TOÀN BỘ task?')) return;
+    const res = await fetch('/api/tasks', { method: 'DELETE' });
+    const d = await res.json();
+    if (!res.ok) { showToast(d.error || 'Lỗi', 'error'); return; }
+    bulkSet.clear(); await loadTasks(); renderList(getFilteredTasks()); showToast(d.message, 'success');
+}
 document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
     if (e.key === 'm' || e.key === 'M') { if (bulkSet.size) bulkClaim(); }
