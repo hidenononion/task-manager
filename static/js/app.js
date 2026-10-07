@@ -1231,8 +1231,17 @@ async function logTime(secs) {
 async function loadAttaches() {
     const res = await fetch(`/api/tasks/${detailTaskId}/attachments`);
     const rows = await res.json();
-    document.getElementById('attachList').innerHTML = (rows || []).map(a =>
-        `<div style="font-size:13px;margin-bottom:4px;">📎 <a href="${escapeHtml(a.url || '#')}" target="_blank" style="color:var(--accent);">${escapeHtml(a.filename || a.url || '')}</a> <small style="color:var(--text-muted);">${escapeHtml(a.note || '')}</small></div>`).join('');
+    document.getElementById('attachList').innerHTML = (rows || []).map(a => {
+        const url = a.url || '';
+        const isPdf = url.toLowerCase().endsWith('.pdf') || url.includes('/file/');
+        if (isPdf && url) {
+            return `<div style="margin-bottom:8px;">
+                <div style="font-size:13px;">📎 <a href="${escapeHtml(url)}" target="_blank" style="color:var(--accent);">${escapeHtml(a.filename || 'Xem file')}</a></div>
+                <embed src="${escapeHtml(url)}" type="application/pdf" style="width:100%;height:400px;border:1px solid var(--border);border-radius:8px;margin-top:4px;">
+            </div>`;
+        }
+        return `<div style="font-size:13px;margin-bottom:4px;">📎 <a href="${escapeHtml(url || '#')}" target="_blank" style="color:var(--accent);">${escapeHtml(a.filename || url || '')}</a> <small style="color:var(--text-muted);">${escapeHtml(a.note || '')}</small></div>`;
+    }).join('');
 }
 async function addAttach() {
     const url = document.getElementById('attachUrl').value.trim();

@@ -1179,46 +1179,55 @@ def api_import_tasks_file():
     if ext not in ('pdf', 'doc', 'docx'):
         return jsonify({'error': 'Chỉ hỗ trợ file .pdf, .doc, .docx'}), 400
 
-    try:
-        if ext == 'pdf':
-            import PyPDF2
-            reader = PyPDF2.PdfReader(file)
-            text = '\n'.join(page.extract_text() or '' for page in reader.pages)
-        else:
-            import docx
-            doc = docx.Document(file)
-            text = '\n'.join(p.text for p in doc.paragraphs)
-    except Exception as e:
-        return jsonify({'error': f'Không đọc được file: {str(e)}'}), 400
-
-    if not text.strip():
-        return jsonify({'error': 'File không có nội dung'}), 400
-
     scope = request.form.get('scope', 'lang') if request.form.get('scope') in ('lang', 'xa') else 'lang'
     priority = request.form.get('priority', 'medium') if request.form.get('priority') in ('low', 'medium', 'high', 'urgent') else 'medium'
 
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    tasks_created = []
+    import uuid, os
+    uploads_dir = os.path.join(os.path.dirname(__file__), 'uploads')
+    os.makedirs(uploads_dir, exist_ok=True)
+
+    safe_name = f"{uuid.uuid4().hex[:8]}_{file.filename}"
+    file_path = os.path.join(uploads_dir, safe_name)
+    file.save(file_path)
+    file_size = os.path.getsize(file_path)
+
+    title = os.path.splitext(file.filename)[0].strip() or file.filename
+    if len(title) > 500:
+        title = title[:500]
+
     conn = get_db()
     cur = conn.cursor()
-    for line in lines:
-        title = line.lstrip('•-*–—>1234567890.) ').strip()
-        if len(title) < 3:
-            continue
-        if len(title) > 500:
-            title = title[:500]
-        cur.execute(q(
-            "INSERT INTO tasks (title, description, status, priority, max_assignees, scope, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
-            "INSERT INTO tasks (title, description, status, priority, max_assignees, scope, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)"),
-            (title, '', 'pending', priority, 3, scope, session['user_id']))
-        tid = cur.fetchone()['id'] if is_pg() else cur.lastrowid
-        tasks_created.append({'id': tid, 'title': title})
+    cur.execute(q(
+        "INSERT INTO tasks (title, description, status, priority, max_assignees, scope, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+        "INSERT INTO tasks (title, description, status, priority, max_assignees, scope, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)"),
+        (title, '', 'pending', priority, 3, scope, session['user_id']))
+    tid = cur.fetchone()['id'] if is_pg() else cur.lastrowid
+
+    att_url = f"/api/tasks/{tid}/file/{safe_name}"
+    cur.execute(q("INSERT INTO attachments (task_id, filename, url, note, size, created_by) VALUES (%s, %s, %s, %s, %s, %s)",
+                  "INSERT INTO attachments (task_id, filename, url, note, size, created_by) VALUES (?, ?, ?, ?, ?, ?)"),
+                (tid, file.filename, att_url, '', file_size, session['user_id']))
     conn.commit()
     conn.close()
 
-    if not tasks_created:
-        return jsonify({'error': 'Không tìm thấy nhiệm vụ nào trong file'}), 400
-    return jsonify({'message': f'Đã import {len(tasks_created)} nhiệm vụ', 'tasks': tasks_created}), 201
+    return jsonify({'message': f'Đã tạo task "{title}" với file đính kèm', 'tasks': [{'id': tid, 'title': title}]}), 201
+
+
+@app.route('/api/tasks/<int:task_id>/file/<path:filename>')
+@login_required
+def api_serve_file(task_id, filename):
+    import os as _os
+    uploads_dir = _os.path.join(_os.path.dirname(__file__), 'uploads')
+    safe = _os.path.basename(filename)
+    file_path = _os.path.join(uploads_dir, safe)
+    if not _os.path.isfile(file_path):
+        return jsonify({'error': 'File không tồn tại'}), 404
+
+    ext = safe.rsplit('.', 1)[-1].lower() if '.' in safe else ''
+    mime_map = {'pdf': 'application/pdf', 'doc': 'application/msword', 'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
+    mime = mime_map.get(ext, 'application/octet-stream')
+    from flask import send_file
+    return send_file(file_path, mimetype=mime, as_attachment=False, download_name=safe)
 
 
 @app.route('/api/tasks/<int:task_id>', methods=['PUT'])
