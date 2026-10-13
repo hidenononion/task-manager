@@ -1887,8 +1887,8 @@ def api_update_status(task_id):
 def api_points_list():
     conn = get_db()
     cur = conn.cursor()
-    users = cur.execute(q("SELECT id, username, score, role FROM users WHERE role = 'user' ORDER BY score DESC",
-                          "SELECT id, username, score, role FROM users WHERE role = 'user' ORDER BY score DESC")).fetchall()
+    users = cur.execute(q("SELECT id, username, score, role FROM users ORDER BY score DESC",
+                          "SELECT id, username, score, role FROM users ORDER BY score DESC")).fetchall()
     conn.close()
     return jsonify([dict(u) for u in users])
 

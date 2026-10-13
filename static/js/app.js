@@ -278,8 +278,8 @@ async function loadPoints() {
 
 function renderPoints() {
     const tbody = document.getElementById('pointsTableBody');
-    if (!allPoints.length) { tbody.innerHTML = `<tr><td colspan="4" class="empty-state"><p>${t('no_data')}</p></td></tr>`; return; }
-    tbody.innerHTML = allPoints.map((u, i) => `<tr><td>${i + 1}</td><td><strong>${escapeHtml(u.username)}</strong></td><td><span class="priority-tag low" style="font-size:14px;">${u.score}</span></td><td><button class="btn btn-sm btn-secondary" onclick="openPointsDetail(${u.id}, '${escapeHtml(u.username)}')">${curLang() === 'en' ? 'View detail' : 'Xem chi tiết'}</button></td></tr>`).join('');
+    if (!allPoints.length) { tbody.innerHTML = `<tr><td colspan="5" class="empty-state"><p>${t('no_data')}</p></td></tr>`; return; }
+    tbody.innerHTML = allPoints.map((u, i) => `<tr><td>${i + 1}</td><td><strong>${escapeHtml(u.username)}</strong></td><td><span class="priority-tag ${u.role === 'bithu' ? 'high' : 'low'}">${u.role === 'bithu' ? t('role_bithu') : t('role_user')}</span></td><td><span class="priority-tag low" style="font-size:14px;">${u.score}</span></td><td><button class="btn btn-sm btn-secondary" onclick="openPointsDetail(${u.id}, '${escapeHtml(u.username)}')">${curLang() === 'en' ? 'View detail' : 'Xem chi tiết'}</button></td></tr>`).join('');
 }
 
 async function openPointsDetail(userId, username) {
