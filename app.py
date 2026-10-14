@@ -530,7 +530,7 @@ def login_page():
 
 @app.route('/register')
 def register_page():
-    return render_template('register.html')
+    return redirect(url_for('login_page') + '#signup')
 
 
 @app.route('/dashboard')

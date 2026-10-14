@@ -4,103 +4,99 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (loginForm) loginForm.addEventListener('submit', handleLogin);
     if (registerForm) registerForm.addEventListener('submit', handleRegister);
+    if (window.location.hash === '#signup') flipCard();
 
     fetch('/api/me').then(r => { if (r.ok) window.location.href = '/dashboard'; }).catch(() => {});
 });
 
-function setLoginState(state) {
-    const boxes = [document.getElementById('userBox'), document.getElementById('passBox')];
-    const icons = [document.getElementById('userIconWrap'), document.getElementById('passIconWrap')];
-    const spinner = document.getElementById('loginSpinner');
-    const btn = document.getElementById('loginBtn');
-    const btnText = document.getElementById('loginBtnText');
-    const scan = document.getElementById('loginScan');
-    const inputs = document.querySelectorAll('.login-box input');
+function flipCard() {
+    document.getElementById('authCard').classList.toggle('flipped');
+}
 
-    if (state === 'loading') {
-        boxes.forEach(b => b.classList.add('searching'));
-        icons.forEach(i => i.classList.add('icon-searching'));
-        inputs.forEach(i => i.disabled = true);
-        btn.disabled = true;
-        spinner.classList.remove('hidden');
-        btnText.textContent = 'Đang đăng nhập...';
-        scan.classList.remove('hidden');
-    } else if (state === 'success') {
-        boxes.forEach(b => b.classList.remove('searching'));
-        icons.forEach(i => {
-            i.classList.remove('icon-searching');
-            const field = i.querySelector('.field-icon');
-            const success = i.querySelector('.success-icon');
-            if (field) field.classList.add('hidden');
-            if (success) {
-                success.classList.remove('hidden');
-                success.classList.remove('success-pop');
-                void success.offsetWidth;
-                success.classList.add('success-pop');
-            }
-        });
-        spinner.classList.add('hidden');
-        scan.classList.add('hidden');
-        btn.disabled = false;
-        btnText.textContent = 'Thành công ✓';
+function togglePassword(btn) {
+    const input = btn.parentElement.querySelector('input');
+    const icon = btn.querySelector('i');
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.replace('fa-eye', 'fa-eye-slash');
     } else {
-        boxes.forEach(b => b.classList.remove('searching'));
-        icons.forEach(i => i.classList.remove('icon-searching'));
-        inputs.forEach(i => i.disabled = false);
+        input.type = 'password';
+        icon.classList.replace('fa-eye-slash', 'fa-eye');
+    }
+}
+
+function shakeCard() {
+    const card = document.getElementById('authCard');
+    const panel = card.classList.contains('flipped') ? card.querySelector('.signup-panel') : card.querySelector('.login-panel');
+    panel.classList.remove('shake');
+    void panel.offsetWidth;
+    panel.classList.add('shake');
+}
+
+function setBtnLoading(btn, loading, text) {
+    if (loading) {
+        btn.disabled = true;
+        btn.dataset.oldText = btn.textContent;
+        btn.textContent = text;
+    } else {
         btn.disabled = false;
-        spinner.classList.add('hidden');
-        scan.classList.add('hidden');
-        btnText.textContent = 'Đăng nhập';
-        const card = document.querySelector('.auth-card');
-        card.classList.remove('shake');
-        void card.offsetWidth;
-        card.classList.add('shake');
+        btn.textContent = btn.dataset.oldText || btn.textContent;
     }
 }
 
 async function handleLogin(e) {
     e.preventDefault();
     const errorEl = document.getElementById('loginError');
+    const btn = e.target.querySelector('.main-btn');
     errorEl.textContent = '';
     const username = document.getElementById('username').value.trim();
     const password = document.getElementById('password').value.trim();
-    if (!username || !password) {
-        errorEl.textContent = 'Vui lòng nhập đầy đủ thông tin';
-        const card = document.querySelector('.auth-card');
-        card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
-        return;
-    }
-    setLoginState('loading');
+    if (!username || !password) { errorEl.textContent = 'Vui lòng nhập đầy đủ thông tin'; shakeCard(); return; }
+    setBtnLoading(btn, true, 'Đang đăng nhập...');
     try {
         const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
         const data = await res.json();
         if (!res.ok) {
-            setLoginState('error');
+            setBtnLoading(btn, false);
             errorEl.textContent = data.error || 'Đăng nhập thất bại';
+            shakeCard();
             return;
         }
-        setLoginState('success');
-        setTimeout(() => { window.location.href = '/dashboard'; }, 800);
+        btn.textContent = '✓ Thành công';
+        setTimeout(() => { window.location.href = '/dashboard'; }, 700);
     } catch (err) {
-        setLoginState('error');
+        setBtnLoading(btn, false);
         errorEl.textContent = 'Lỗi kết nối server';
+        shakeCard();
     }
 }
 
 async function handleRegister(e) {
     e.preventDefault();
     const errorEl = document.getElementById('registerError');
+    const btn = e.target.querySelector('.main-btn');
     errorEl.textContent = '';
-    const username = document.getElementById('username').value.trim();
-    const password = document.getElementById('password').value.trim();
+    const username = document.getElementById('regUsername').value.trim();
+    const password = document.getElementById('regPassword').value.trim();
     const confirmPassword = document.getElementById('confirmPassword').value.trim();
-    if (!username || !password || !confirmPassword) { errorEl.textContent = 'Vui lòng nhập đầy đủ thông tin'; return; }
-    if (password !== confirmPassword) { errorEl.textContent = 'Password xác nhận không khớp'; return; }
-    if (password.length < 4) { errorEl.textContent = 'Password phải có ít nhất 4 ký tự'; return; }
+    if (!username || !password || !confirmPassword) { errorEl.textContent = 'Vui lòng nhập đầy đủ thông tin'; shakeCard(); return; }
+    if (password !== confirmPassword) { errorEl.textContent = 'Password xác nhận không khớp'; shakeCard(); return; }
+    if (password.length < 4) { errorEl.textContent = 'Password phải có ít nhất 4 ký tự'; shakeCard(); return; }
+    setBtnLoading(btn, true, 'Đang tạo...');
     try {
         const res = await fetch('/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });
         const data = await res.json();
-        if (!res.ok) { errorEl.textContent = data.error || 'Đăng ký thất bại'; return; }
-        window.location.href = '/login';
-    } catch (err) { errorEl.textContent = 'Lỗi kết nối server'; }
+        if (!res.ok) {
+            setBtnLoading(btn, false);
+            errorEl.textContent = data.error || 'Đăng ký thất bại';
+            shakeCard();
+            return;
+        }
+        btn.textContent = '✓ Thành công';
+        setTimeout(() => { window.location.href = '/login'; }, 700);
+    } catch (err) {
+        setBtnLoading(btn, false);
+        errorEl.textContent = 'Lỗi kết nối server';
+        shakeCard();
+    }
 }
