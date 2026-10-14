@@ -273,6 +273,178 @@ a:hover {
     font-weight: 500;
 }
 
+/* ===== LOGIN ANIMATION (AnimatedSearch) ===== */
+.auth-form {
+    position: relative;
+}
+
+.login-box {
+    position: relative;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-input);
+    transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+.login-box:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-light);
+}
+
+.login-box .top-highlight {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+    z-index: 1;
+}
+
+.login-icon-wrap {
+    position: relative;
+    width: 36px;
+    height: 36px;
+    margin-left: 10px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    transition: transform 0.4s ease, color 0.3s ease;
+}
+
+.field-icon,
+.success-icon {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+}
+
+.success-icon {
+    color: #34d399;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.login-box input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 0 14px;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 15px;
+    font-family: inherit;
+}
+
+.login-box input::placeholder {
+    color: var(--text-muted);
+}
+
+.login-box input:disabled {
+    opacity: 0.7;
+}
+
+.login-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+}
+
+.login-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+/* spinner */
+.spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spinnerRotate 0.7s linear infinite;
+}
+
+@keyframes spinnerRotate {
+    to { transform: rotate(360deg); }
+}
+
+/* scanning line */
+.scan-line {
+    position: absolute;
+    left: 0;
+    bottom: -6px;
+    width: 50%;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 2px;
+    animation: scanLine 1.1s linear infinite;
+}
+
+@keyframes scanLine {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(200%); }
+}
+
+/* searching pulse */
+.login-box.searching {
+    animation: searchPulse 0.5s ease-in-out infinite;
+}
+
+@keyframes searchPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.012); }
+}
+
+/* icon wiggle */
+.login-icon-wrap.icon-searching {
+    animation: iconSearch 0.7s ease-in-out infinite;
+    color: var(--accent);
+}
+
+@keyframes iconSearch {
+    0% { transform: translateX(0) rotate(0deg); }
+    25% { transform: translateX(4px) rotate(12deg); }
+    50% { transform: translateX(0) rotate(-12deg); }
+    75% { transform: translateX(4px) rotate(12deg); }
+    100% { transform: translateX(0) rotate(0deg); }
+}
+
+/* success check pop */
+.success-icon.success-pop {
+    animation: successPop 0.5s cubic-bezier(.17,.89,.32,1.49);
+}
+
+@keyframes successPop {
+    0% { transform: scale(0) rotate(-45deg); opacity: 0; }
+    70% { transform: scale(1.25) rotate(8deg); opacity: 1; }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+/* error shake */
+.auth-card.shake {
+    animation: cardShake 0.45s ease;
+}
+
+@keyframes cardShake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-10px); }
+    40% { transform: translateX(10px); }
+    60% { transform: translateX(-6px); }
+    80% { transform: translateX(6px); }
+}
+
 /* ===== BUTTONS ===== */
 .btn {
     padding: 11px 20px;
