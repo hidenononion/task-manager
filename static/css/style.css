@@ -61,7 +61,7 @@
     --border-light: rgba(0, 0, 0, 0.12);
     --text-primary: #1a1a2e;
     --text-secondary: #666680;
-    --text-muted: #999;
+    --text-muted: #76768a;
     --shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
     --shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.12);
 }
@@ -908,6 +908,14 @@ a:hover {
 .glow-item.active a {
     color: #fff;
     transform: translateY(-4px);
+}
+
+[data-theme="light"] .glow-item a {
+    color: var(--text-secondary);
+}
+
+[data-theme="light"] .glow-item.active a {
+    color: var(--clr, var(--accent));
 }
 
 .glow-indicator {
