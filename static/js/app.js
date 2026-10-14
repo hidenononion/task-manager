@@ -28,6 +28,7 @@ document.getElementById('userAvatar').innerHTML = currentUser.avatar ? `<img src
         const isAdminOrBithu = currentUser.role === 'bithu';
         document.querySelectorAll('.admin-only').forEach(el => el.style.display = isAdminOrBithu ? '' : 'none');
         document.querySelectorAll('.user-only').forEach(el => el.style.display = !isAdminOrBithu ? '' : 'none');
+        moveGlowIndicator();
         if (document.getElementById('addTaskBtn')) {
             document.getElementById('addTaskBtn').style.display = isAdminOrBithu ? 'inline-flex' : 'none';
         }
@@ -75,13 +76,23 @@ function updateThemeUI(theme) {
 }
 
 // ==================== NAV ====================
+function moveGlowIndicator() {
+    const ind = document.getElementById('glowIndicator');
+    const active = document.querySelector('.glow-item.active');
+    if (!ind || !active) return;
+    ind.style.setProperty('--clr', active.style.getPropertyValue('--clr') || '#6c5ce7');
+    ind.style.left = (active.offsetLeft + active.offsetWidth / 2) + 'px';
+    ind.style.top = (active.offsetTop + active.offsetHeight / 2) + 'px';
+    ind.style.opacity = '1';
+}
+
 function setupNav() {
-    document.querySelectorAll('.nav-item').forEach(item => {
+    document.querySelectorAll('.nav-item, .glow-item').forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
-            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-            item.classList.add('active');
-            currentView = item.dataset.view;
+            const view = item.dataset.view;
+            document.querySelectorAll('.nav-item, .glow-item').forEach(n => n.classList.toggle('active', n.dataset.view === view));
+            currentView = view;
 
             const views = ['kanbanView', 'listView', 'ganttView', 'calView', 'workloadView', 'pointsView', 'myPointsView', 'financeView', 'usersView', 'settingsView'];
             views.forEach(v => { const el = document.getElementById(v); if (el) el.style.display = 'none'; });
@@ -100,8 +111,10 @@ function setupNav() {
             else if (currentView === 'finance') { document.getElementById('financeView').style.display = 'block'; loadFinance(); }
             else if (currentView === 'users') { document.getElementById('usersView').style.display = 'block'; loadUsersList(); }
             else if (currentView === 'settings') { document.getElementById('settingsView').style.display = 'block'; loadSettings(); }
+            moveGlowIndicator();
         });
     });
+    window.addEventListener('resize', moveGlowIndicator);
 }
 
 // ==================== FILTERS ====================

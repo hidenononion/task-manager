@@ -58,6 +58,51 @@
     <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
 
     <main class="main-content">
+        <nav class="glow-nav">
+            <ul>
+                <li class="glow-item active" data-view="kanban" style="--clr:#f44336;">
+                    <a href="#"><i class="fa-solid fa-table-columns"></i></a>
+                    <span class="glow-tip" data-i18n="title_kanban">Kanban Board</span>
+                </li>
+                <li class="glow-item" data-view="list" style="--clr:#ffa117;">
+                    <a href="#"><i class="fa-solid fa-list"></i></a>
+                    <span class="glow-tip" data-i18n="title_list">Danh sách</span>
+                </li>
+                <li class="glow-item" data-view="gantt" style="--clr:#0fc70f;">
+                    <a href="#"><i class="fa-solid fa-chart-gantt"></i></a>
+                    <span class="glow-tip" data-i18n="nav_gantt">Tiến độ</span>
+                </li>
+                <li class="glow-item" data-view="calendar" style="--clr:#2196f3;">
+                    <a href="#"><i class="fa-regular fa-calendar"></i></a>
+                    <span class="glow-tip" data-i18n="nav_cal">Lịch</span>
+                </li>
+                <li class="glow-item" data-view="workload" style="--clr:#b145e9;">
+                    <a href="#"><i class="fa-solid fa-chart-column"></i></a>
+                    <span class="glow-tip" data-i18n="nav_workload">Khối lượng</span>
+                </li>
+                <li class="glow-item admin-only" data-view="points" style="--clr:#ff5da2;display:none;">
+                    <a href="#"><i class="fa-regular fa-star"></i></a>
+                    <span class="glow-tip" data-i18n="title_points">Điểm tổng hợp</span>
+                </li>
+                <li class="glow-item admin-only" data-view="finance" style="--clr:#ffd60a;display:none;">
+                    <a href="#"><i class="fa-solid fa-coins"></i></a>
+                    <span class="glow-tip" data-i18n="title_finance">Tài chính</span>
+                </li>
+                <li class="glow-item admin-only" data-view="users" style="--clr:#00d4ff;display:none;">
+                    <a href="#"><i class="fa-solid fa-users"></i></a>
+                    <span class="glow-tip" data-i18n="title_users">Quản lý user</span>
+                </li>
+                <li class="glow-item" data-view="my-points" style="--clr:#ff8c00;">
+                    <a href="#"><i class="fa-solid fa-medal"></i></a>
+                    <span class="glow-tip" data-i18n="title_mine">Điểm của tôi</span>
+                </li>
+                <li class="glow-item" data-view="settings" style="--clr:#8e8e93;">
+                    <a href="#"><i class="fa-solid fa-gear"></i></a>
+                    <span class="glow-tip" data-i18n="title_settings">Cài đặt</span>
+                </li>
+                <div class="glow-indicator" id="glowIndicator"></div>
+            </ul>
+        </nav>
         <div class="stats-grid" id="statsGrid">
             <div class="stat-card total">
                 <div class="stat-icon">&#128203;</div>
