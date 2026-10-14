@@ -1770,55 +1770,132 @@ select option {
 
 /* ===== RESPONSIVE - MOBILE ===== */
 @media (max-width: 768px) {
+    /* Top bar - compact single row */
     .glow-nav {
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 8px;
-        padding: 8px 10px;
+        flex-wrap: nowrap;
+        gap: 6px;
+        padding: 6px 8px;
+    }
+
+    .glow-brand .logo {
+        width: 30px;
+        height: 30px;
+        font-size: 13px;
+        border-radius: 8px;
     }
 
     .glow-brand .app-name {
         display: none;
     }
 
+    .glow-nav ul {
+        flex: 1;
+        min-width: 0;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        gap: 2px;
+        padding: 5px 8px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .glow-nav ul::-webkit-scrollbar {
+        display: none;
+    }
+
+    .glow-item a {
+        width: 36px;
+        height: 36px;
+        font-size: 15px;
+    }
+
+    .glow-item a:hover,
+    .glow-item.active a {
+        transform: none;
+    }
+
+    .glow-indicator {
+        width: 42px;
+        height: 42px;
+    }
+
+    .glow-tip {
+        display: none;
+    }
+
     .glow-actions {
-        width: 100%;
-        justify-content: center;
-        order: 3;
+        width: auto;
+        order: 0;
+        gap: 6px;
     }
 
     .glow-actions .user-details {
         display: none;
     }
 
-    #themeLabel {
+    .glow-actions .user-avatar {
+        width: 30px;
+        height: 30px;
+        font-size: 12px;
+    }
+
+    .glow-actions .theme-toggle {
+        padding: 6px 8px;
+    }
+
+    .glow-actions .btn-logout {
+        padding: 8px 10px;
+    }
+
+    #themeLabel,
+    .btn-logout-text {
         display: none;
     }
 
+    /* Header */
     .content-header {
-        padding: 14px 16px;
+        padding: 10px 12px;
         flex-direction: column;
-        align-items: flex-start;
-        gap: 12px;
+        align-items: stretch;
+        gap: 8px;
         position: relative;
+    }
+
+    .header-left {
+        gap: 8px;
+    }
+
+    .content-header h2 {
+        font-size: 17px;
+    }
+
+    .task-count {
+        font-size: 11px;
+        padding: 3px 8px;
     }
 
     .header-right {
         width: 100%;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: 6px;
     }
 
     .search-bar {
         width: 100%;
     }
 
-    .search-bar input {
-        width: 100%;
-    }
-
+    .search-bar input,
     .search-bar input:focus {
         width: 100%;
+        padding: 9px 12px 9px 34px;
+        font-size: 16px;
+    }
+
+    .search-bar .search-icon {
+        left: 11px;
+        font-size: 13px;
     }
 
     .filters {
@@ -1828,32 +1905,53 @@ select option {
     .filter-select {
         flex: 1;
         min-width: 0;
+        padding: 9px 10px;
+        font-size: 12px;
+    }
+
+    .btn {
+        padding: 9px 14px;
+        font-size: 13px;
     }
 
     #addTaskBtn {
         width: 100%;
         justify-content: center;
-        padding: 12px;
+        padding: 10px;
     }
 
+    /* Stats */
     .stats-grid {
         grid-template-columns: repeat(2, 1fr);
-        padding: 12px;
-        gap: 10px;
+        padding: 10px 12px;
+        gap: 8px;
     }
 
     .stat-card {
-        padding: 16px;
+        padding: 12px;
+        border-radius: var(--radius);
+    }
+
+    .stat-icon {
+        width: 32px;
+        height: 32px;
+        font-size: 15px;
+        margin-bottom: 8px;
+        border-radius: 9px;
     }
 
     .stat-value {
-        font-size: 24px;
+        font-size: 20px;
+    }
+
+    .stat-label {
+        font-size: 11px;
     }
 
     /* Kanban */
     .kanban-board {
-        padding: 12px;
-        gap: 12px;
+        padding: 10px;
+        gap: 10px;
         flex-direction: column;
     }
 
@@ -1862,13 +1960,21 @@ select option {
         max-width: 100%;
     }
 
+    .column-header {
+        padding: 10px 12px;
+    }
+
+    .column-header h3 {
+        font-size: 13px;
+    }
+
     .column-body {
         max-height: 50vh;
     }
 
     /* List */
     .list-view {
-        padding: 12px;
+        padding: 10px 12px;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
     }
@@ -1877,9 +1983,9 @@ select option {
         min-width: 650px;
     }
 
-    /* Task card mobile */
+    /* Task card */
     .task-card {
-        padding: 16px;
+        padding: 12px;
     }
 
     .task-card-footer {
@@ -1894,7 +2000,7 @@ select option {
     .task-card-actions-row {
         width: 100%;
         justify-content: space-between;
-        padding-top: 10px;
+        padding-top: 8px;
     }
 
     .task-card-actions-row .status-select {
@@ -1905,31 +2011,54 @@ select option {
         opacity: 1;
     }
 
-    /* Modal mobile */
+    /* Modal - bottom sheet */
+    .modal {
+        align-items: flex-end;
+    }
+
     .modal-content {
-        width: 96%;
-        max-height: 90vh;
-        margin: 10px;
-        border-radius: var(--radius-lg);
+        width: 100%;
+        max-width: 100%;
+        height: auto;
+        max-height: 92vh;
+        max-height: 92dvh;
+        margin: 0;
+        border: none;
+        border-radius: 20px 20px 0 0;
     }
 
     .modal-header {
-        padding: 20px 22px;
+        padding: 14px 16px;
+    }
+
+    .modal-header h3 {
+        font-size: 17px;
     }
 
     .modal-body {
-        padding: 22px;
+        padding: 16px;
+    }
+
+    .modal-body .form-group {
+        margin-bottom: 14px;
+    }
+
+    .modal-body input,
+    .modal-body select,
+    .modal-body textarea {
+        padding: 11px 14px;
+        font-size: 16px;
     }
 
     .modal-footer {
-        padding: 16px 22px;
+        padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
         flex-direction: column-reverse;
     }
 
     .modal-footer .btn {
         width: 100%;
         justify-content: center;
-        padding: 14px;
+        padding: 13px;
     }
 
     .form-row {
@@ -1937,11 +2066,35 @@ select option {
         gap: 0;
     }
 
-    /* Toast mobile */
+    /* Login / register */
+    .form-panel {
+        padding: 28px 20px;
+    }
+
+    .form-panel h1 {
+        font-size: 22px;
+    }
+
+    .form-panel .auth-logo {
+        width: 48px;
+        height: 48px;
+        font-size: 18px;
+        margin-bottom: 12px;
+    }
+
+    .form-panel .subtitle {
+        margin-bottom: 18px;
+    }
+
+    .input-group input {
+        font-size: 16px;
+    }
+
+    /* Toast */
     .toast {
-        left: 16px;
-        right: 16px;
-        bottom: 16px;
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
         text-align: center;
         font-size: 13px;
     }
@@ -1949,23 +2102,16 @@ select option {
 
 /* ===== RESPONSIVE - SMALL MOBILE ===== */
 @media (max-width: 400px) {
-    .auth-card {
-        padding: 32px 24px;
-        border-radius: var(--radius-lg);
+    .form-panel {
+        padding: 22px 14px;
     }
 
-    .auth-header h1 {
-        font-size: 24px;
-    }
-
-    .logo {
-        width: 56px;
-        height: 56px;
-        font-size: 22px;
+    .form-panel h1 {
+        font-size: 19px;
     }
 
     .content-header h2 {
-        font-size: 20px;
+        font-size: 15px;
     }
 
     .checkbox-group {
@@ -1973,16 +2119,35 @@ select option {
     }
 
     .checkbox-label {
-        padding: 7px 12px;
+        padding: 6px 10px;
         font-size: 12px;
     }
 
     .column-header {
-        padding: 16px 18px;
+        padding: 9px 10px;
     }
 
     .task-card {
-        padding: 14px;
+        padding: 10px;
+    }
+
+    .glow-item a {
+        width: 32px;
+        height: 32px;
+        font-size: 14px;
+    }
+
+    .glow-indicator {
+        width: 38px;
+        height: 38px;
+    }
+
+    .stat-card {
+        padding: 10px;
+    }
+
+    .stat-value {
+        font-size: 18px;
     }
 }
 
