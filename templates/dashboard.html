@@ -2,63 +2,12 @@
 {% block title %}Dashboard - Task Manager{% endblock %}
 {% block body %}
 <div class="app">
-    <aside class="sidebar">
-        <div class="sidebar-header">
-            <div class="logo logo-doan"><img src="/static/images/logo-doan.webp" alt="Logo Đoàn"></div>
-            <span class="app-name">Đoàn TN thôn Lam Khê</span>
-        </div>
-        <nav class="sidebar-nav">
-            <a href="#" class="nav-item active" data-view="kanban">
-                <span class="nav-icon">&#9638;</span> Kanban Board
-            </a>
-            <a href="#" class="nav-item" data-view="list">
-                <span class="nav-icon">&#9776;</span> Danh sách
-            </a>
-            <a href="#" class="nav-item" data-view="gantt">
-                <span class="nav-icon">&#128207;</span> <span data-i18n="nav_gantt">Tiến độ</span>
-            </a>
-            <a href="#" class="nav-item" data-view="calendar">
-                <span class="nav-icon">&#128197;</span> <span data-i18n="nav_cal">Lịch</span>
-            </a>
-            <a href="#" class="nav-item" data-view="workload">
-                <span class="nav-icon">&#128202;</span> <span data-i18n="nav_workload">Khối lượng</span>
-            </a>
-            <a href="#" class="nav-item admin-only" data-view="points" style="display:none;">
-                <span class="nav-icon">&#11088;</span> Điểm tổng hợp
-            </a>
-            <a href="#" class="nav-item admin-only" data-view="finance" style="display:none;">
-                <span class="nav-icon">&#128176;</span> Tài chính
-            </a>
-            <a href="#" class="nav-item admin-only" data-view="users" style="display:none;">
-                <span class="nav-icon">&#128101;</span> Quản lý user
-            </a>
-            <a href="#" class="nav-item" data-view="my-points">
-                <span class="nav-icon">&#11088;</span> Điểm của tôi
-            </a>
-            <a href="#" class="nav-item" data-view="settings">
-                <span class="nav-icon">&#9881;</span> Cài đặt
-            </a>
-        </nav>
-        <div class="sidebar-footer">
-            <button class="theme-toggle" onclick="toggleTheme()">
-                <span class="icon" id="themeIcon">&#9790;</span>
-                <span id="themeLabel">Chế độ sáng</span>
-            </button>
-            <div class="user-info">
-                <div class="user-avatar" id="userAvatar">A</div>
-                <div class="user-details">
-                    <span id="userName">User</span>
-                    <span id="userRole" class="badge">user</span>
-                </div>
-            </div>
-            <button class="btn btn-logout" onclick="logout()" data-i18n="logout">Đăng xuất</button>
-        </div>
-    </aside>
-
-    <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
-
     <main class="main-content">
         <nav class="glow-nav">
+            <div class="glow-brand">
+                <div class="logo logo-doan"><img src="/static/images/logo-doan.webp" alt="Logo Đoàn"></div>
+                <span class="app-name">Đoàn TN thôn Lam Khê</span>
+            </div>
             <ul>
                 <li class="glow-item active" data-view="kanban" style="--clr:#f44336;">
                     <a href="#"><i class="fa-solid fa-table-columns"></i></a>
@@ -102,6 +51,20 @@
                 </li>
                 <div class="glow-indicator" id="glowIndicator"></div>
             </ul>
+            <div class="glow-actions">
+                <button class="theme-toggle" onclick="toggleTheme()">
+                    <span class="icon" id="themeIcon">&#9790;</span>
+                    <span id="themeLabel">Chế độ sáng</span>
+                </button>
+                <div class="user-info">
+                    <div class="user-avatar" id="userAvatar">A</div>
+                    <div class="user-details">
+                        <span id="userName">User</span>
+                        <span id="userRole" class="badge">user</span>
+                    </div>
+                </div>
+                <button class="btn btn-logout" onclick="logout()" data-i18n="logout">Đăng xuất</button>
+            </div>
         </nav>
         <div class="stats-grid" id="statsGrid">
             <div class="stat-card total">
@@ -133,7 +96,6 @@
 
         <header class="content-header">
             <div class="header-left">
-                <button class="hamburger" id="hamburger" onclick="toggleSidebar()">&#9776;</button>
                 <h2 id="viewTitle">Kanban Board</h2>
                 <span class="task-count" id="taskCount">0 nhiệm vụ</span>
             </div>

@@ -193,7 +193,8 @@ a:hover {
     border-radius: inherit;
 }
 
-.sidebar-header .logo-doan img {
+/* ===== GLOW NAV BRAND (logo in top bar) ===== */
+.glow-brand .logo-doan img {
     width: 44px;
     height: 44px;
 }
@@ -552,87 +553,11 @@ a:hover {
     background: var(--bg-primary);
 }
 
-/* ===== SIDEBAR ===== */
-.sidebar {
-    width: var(--sidebar-width);
-    background: var(--bg-glass);
-    backdrop-filter: blur(40px);
-    -webkit-backdrop-filter: blur(40px);
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    z-index: 10;
-}
-
-.sidebar-header {
-    padding: 24px 20px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    border-bottom: 1px solid var(--border);
-}
-
-.sidebar-header .logo {
-    width: 44px;
-    height: 44px;
-    font-size: 18px;
-    margin-bottom: 0;
-    border-radius: 12px;
-}
-
+/* ===== TOP BAR PARTS ===== */
 .app-name {
     font-weight: 700;
     font-size: 17px;
     letter-spacing: -0.3px;
-}
-
-.sidebar-nav {
-    flex: 1;
-    padding: 20px 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.nav-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    border-radius: var(--radius);
-    color: var(--text-secondary);
-    text-decoration: none;
-    font-size: 14px;
-    font-weight: 500;
-    transition: var(--transition);
-}
-
-.nav-item:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-    text-decoration: none;
-}
-
-.nav-item.active {
-    background: var(--accent-light);
-    color: var(--accent);
-    font-weight: 600;
-}
-
-.nav-icon {
-    font-size: 18px;
-    width: 24px;
-    text-align: center;
-    flex-shrink: 0;
-}
-
-.sidebar-footer {
-    padding: 16px;
-    border-top: 1px solid var(--border);
 }
 
 .user-info {
@@ -725,12 +650,63 @@ a:hover {
     top: 0;
     z-index: 9;
     display: flex;
-    justify-content: center;
-    padding: 16px 16px 12px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 20px;
     background: var(--bg-glass);
     backdrop-filter: blur(40px);
     -webkit-backdrop-filter: blur(40px);
     border-bottom: 1px solid var(--border);
+}
+
+.glow-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.glow-brand .logo {
+    width: 38px;
+    height: 38px;
+    margin-bottom: 0;
+    font-size: 15px;
+    border-radius: 10px;
+}
+
+.glow-brand .app-name {
+    font-size: 15px;
+    white-space: nowrap;
+}
+
+.glow-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+}
+
+.glow-actions .theme-toggle {
+    width: auto;
+    margin-bottom: 0;
+    padding: 8px 12px;
+}
+
+.glow-actions .user-info {
+    margin-bottom: 0;
+}
+
+.glow-actions .user-avatar {
+    width: 36px;
+    height: 36px;
+    font-size: 14px;
+}
+
+.glow-actions .btn-logout {
+    padding: 8px 14px;
+    font-size: 13px;
+    white-space: nowrap;
 }
 
 .glow-nav ul {
@@ -818,7 +794,6 @@ a:hover {
 
 /* ===== MAIN CONTENT ===== */
 .main-content {
-    margin-left: var(--sidebar-width);
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -1612,41 +1587,6 @@ select option {
     font-weight: 500;
 }
 
-/* ===== HAMBURGER ===== */
-.hamburger {
-    display: none;
-    background: var(--bg-hover);
-    border: 1px solid var(--border);
-    color: var(--text-primary);
-    font-size: 20px;
-    cursor: pointer;
-    padding: 8px 12px;
-    border-radius: var(--radius);
-    line-height: 1;
-    transition: var(--transition);
-}
-
-.hamburger:hover {
-    background: var(--border);
-}
-
-.sidebar-overlay {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    z-index: 9;
-}
-
-.sidebar-overlay.active {
-    display: block;
-}
-
 /* ===== RESPONSIVE - TABLET ===== */
 @media (max-width: 900px) {
     .stats-grid {
@@ -1676,32 +1616,29 @@ select option {
 
 /* ===== RESPONSIVE - MOBILE ===== */
 @media (max-width: 768px) {
-    .hamburger {
-        display: flex;
+    .glow-nav {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        padding: 8px 10px;
     }
 
-    .sidebar {
-        transform: translateX(-100%);
-        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        z-index: 20;
-        width: 280px;
-        box-shadow: 8px 0 40px rgba(0, 0, 0, 0.3);
+    .glow-brand .app-name {
+        display: none;
     }
 
-    .sidebar.open {
-        transform: translateX(0);
+    .glow-actions {
+        width: 100%;
+        justify-content: center;
+        order: 3;
     }
 
-    .sidebar-header {
-        padding: 22px 20px;
+    .glow-actions .user-details {
+        display: none;
     }
 
-    .sidebar-header .logo {
-        margin-bottom: 0;
-    }
-
-    .main-content {
-        margin-left: 0;
+    #themeLabel {
+        display: none;
     }
 
     .content-header {

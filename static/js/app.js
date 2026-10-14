@@ -38,16 +38,10 @@ document.getElementById('userAvatar').innerHTML = currentUser.avatar ? `<img src
         fillSettings();
         applyLang(localStorage.getItem('lang') || currentUser.language || 'vi');
         if (currentUser.default_view && (currentView === 'kanban')) {
-            const target = document.querySelector(`.nav-item[data-view="${currentUser.default_view}"]`);
+            const target = document.querySelector(`.glow-item[data-view="${currentUser.default_view}"]`);
             if (target && currentUser.default_view !== 'kanban') target.click();
         }
     } catch (err) { window.location.href = '/login'; }
-}
-
-// ==================== SIDEBAR ====================
-function toggleSidebar() {
-    document.querySelector('.sidebar').classList.toggle('open');
-    document.querySelector('.sidebar-overlay').classList.toggle('active');
 }
 
 // ==================== THEME ====================
@@ -87,11 +81,11 @@ function moveGlowIndicator() {
 }
 
 function setupNav() {
-    document.querySelectorAll('.nav-item, .glow-item').forEach(item => {
+    document.querySelectorAll('.glow-item').forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
             const view = item.dataset.view;
-            document.querySelectorAll('.nav-item, .glow-item').forEach(n => n.classList.toggle('active', n.dataset.view === view));
+            document.querySelectorAll('.glow-item').forEach(n => n.classList.toggle('active', n.dataset.view === view));
             currentView = view;
 
             const views = ['kanbanView', 'listView', 'ganttView', 'calView', 'workloadView', 'pointsView', 'myPointsView', 'financeView', 'usersView', 'settingsView'];
@@ -891,12 +885,6 @@ function applyLang(lang) {
     if (lang) localStorage.setItem('lang', lang);
     document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
     document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
-    const icons = { kanban: '&#9638;', list: '&#9776;', gantt: '&#128207;', calendar: '&#128197;', workload: '&#128202;', points: '&#11088;', finance: '&#128176;', users: '&#128101;', 'my-points': '&#11088;', settings: '&#9881;' };
-    const navKeys = { kanban: 'nav_kanban', list: 'nav_list', gantt: 'nav_gantt', calendar: 'nav_cal', workload: 'nav_workload', points: 'nav_points', finance: 'nav_finance', users: 'nav_users', 'my-points': 'nav_mine', settings: 'nav_settings' };
-    document.querySelectorAll('.nav-item').forEach(n => {
-        const k = navKeys[n.dataset.view];
-        if (k) n.innerHTML = `<span class="nav-icon">${icons[n.dataset.view] || ''}</span> ${t(k)}`;
-    });
     const titles = { kanban: t('title_kanban'), list: t('title_list'), points: t('title_points'), 'my-points': t('title_mine'), finance: t('title_finance'), users: t('title_users'), settings: t('title_settings') };
     const vt = document.getElementById('viewTitle');
     if (vt && titles[currentView]) vt.textContent = titles[currentView];
