@@ -687,14 +687,29 @@ a:hover {
     flex-shrink: 0;
 }
 
+.glow-actions > * {
+    flex-shrink: 0;
+}
+
 .glow-actions .theme-toggle {
     width: auto;
     margin-bottom: 0;
     padding: 8px 12px;
+    white-space: nowrap;
+    width: max-content;
 }
 
 .glow-actions .user-info {
     margin-bottom: 0;
+    flex-shrink: 0;
+}
+
+.glow-actions .user-details span {
+    white-space: nowrap;
+}
+
+.glow-actions .badge {
+    white-space: nowrap;
 }
 
 .glow-actions .user-avatar {
