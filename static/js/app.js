@@ -76,9 +76,10 @@ function moveGlowIndicator() {
     const ind = document.getElementById('glowIndicator');
     const active = document.querySelector('.glow-item.active');
     if (!ind || !active) return;
-    ind.style.setProperty('--clr', active.style.getPropertyValue('--clr') || '#6c5ce7');
-    ind.style.left = (active.offsetLeft + active.offsetWidth / 2) + 'px';
-    ind.style.top = (active.offsetTop + active.offsetHeight / 2) + 'px';
+    ind.style.left = active.offsetLeft + 'px';
+    ind.style.top = active.offsetTop + 'px';
+    ind.style.width = active.offsetWidth + 'px';
+    ind.style.height = active.offsetHeight + 'px';
     ind.style.opacity = '1';
 }
 
@@ -113,6 +114,7 @@ function setupNav() {
         });
     });
     window.addEventListener('resize', moveGlowIndicator);
+    window.addEventListener('load', moveGlowIndicator);
 }
 
 // ==================== FILTERS ====================

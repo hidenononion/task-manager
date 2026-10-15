@@ -1368,6 +1368,8 @@ a:hover {
     border-radius: 13px;
     color: #6f6f80;
     font-size: 16px;
+    position: relative;
+    z-index: 1;
     transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -1378,8 +1380,8 @@ a:hover {
 
 .glow-item.active a {
     color: #fff;
-    background: linear-gradient(145deg, #f0443e, #7f2e5d);
-    box-shadow: 0 0 24px rgba(244, 68, 62, 0.42);
+    background: transparent;
+    box-shadow: none;
 }
 
 [data-theme="light"] .glow-item a {
@@ -1393,12 +1395,29 @@ a:hover {
 
 [data-theme="light"] .glow-item.active a {
     color: #236fcf;
-    background: rgba(235, 243, 255, 0.62);
-    box-shadow: 6px 6px 13px rgba(92, 108, 169, 0.22), -6px -6px 13px rgba(255, 255, 255, 0.58);
+    background: transparent;
+    box-shadow: none;
 }
 
 .glow-indicator {
-    display: none;
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 42px;
+    height: 40px;
+    border-radius: 13px;
+    background: linear-gradient(145deg, #f0443e, #7f2e5d);
+    box-shadow: 0 0 24px rgba(244, 68, 62, 0.42);
+    pointer-events: none;
+    opacity: 0;
+    z-index: 0;
+    transition: left 0.45s cubic-bezier(0.17, 0.89, 0.32, 1.28), top 0.45s cubic-bezier(0.17, 0.89, 0.32, 1.28), width 0.45s cubic-bezier(0.17, 0.89, 0.32, 1.28), height 0.45s cubic-bezier(0.17, 0.89, 0.32, 1.28), opacity 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+}
+
+[data-theme="light"] .glow-indicator {
+    background: rgba(235, 243, 255, 0.62);
+    box-shadow: 6px 6px 13px rgba(92, 108, 169, 0.22), -6px -6px 13px rgba(255, 255, 255, 0.58);
 }
 
 .glow-tip {
