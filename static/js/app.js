@@ -94,6 +94,8 @@ function setupNav() {
             const titles = { kanban: t('title_kanban'), list: t('title_list'), gantt: t('gantt_h'), calendar: t('nav_cal'), workload: t('nav_workload'), points: t('title_points'), 'my-points': t('title_mine'), finance: t('title_finance'), users: t('title_users'), settings: t('title_settings') };
             document.getElementById('viewTitle').textContent = titles[currentView] || '';
             document.getElementById('statsGrid').style.display = ['kanban', 'list'].includes(currentView) ? '' : 'none';
+            const wb = document.getElementById('welcomeBar');
+            if (wb) wb.style.display = ['kanban', 'list'].includes(currentView) ? '' : 'none';
 
             if (currentView === 'kanban') document.getElementById('kanbanView').style.display = 'flex';
             else if (currentView === 'list') { document.getElementById('listView').style.display = 'block'; renderTasks(); }
@@ -455,6 +457,10 @@ function openTaskModal(taskId = null) {
     }
     document.getElementById('aiSuggestBox').innerHTML = '';
     document.getElementById('smartBox').innerHTML = '';
+    const tf = document.getElementById('taskFile');
+    if (tf) tf.value = '';
+    const tfs = document.getElementById('taskFileStatus');
+    if (tfs) tfs.textContent = '';
     document.getElementById('taskModal').classList.add('active');
 }
 
@@ -532,9 +538,26 @@ async function saveTask() {
         let data = {};
         try { data = await res.json(); } catch (e) { errorEl.textContent = `Lỗi server (${res.status})`; return; }
         if (!res.ok) { errorEl.textContent = data.error || `Lỗi (${res.status})`; return; }
+        let savedId = taskId ? parseInt(taskId, 10) : (data && data.id);
+        let attachWarn = '';
+        const fileInput = document.getElementById('taskFile');
+        const statusEl = document.getElementById('taskFileStatus');
+        if (savedId && fileInput && fileInput.files.length) {
+            if (statusEl) statusEl.textContent = t('file_uploading');
+            const fd = new FormData();
+            fd.append('file', fileInput.files[0]);
+            try {
+                const up = await fetch(`/api/tasks/${savedId}/file`, { method: 'POST', body: fd });
+                let uinfo = {};
+                try { uinfo = await up.json(); } catch (e) { /* ignore */ }
+                if (!up.ok) attachWarn = uinfo.error || `Upload file lỗi (${up.status})`;
+            } catch (e) { attachWarn = t('file_conn_err'); }
+            if (statusEl) statusEl.textContent = '';
+        }
         closeTaskModal();
         await loadTasks();
-        showToast(taskId ? 'Đã cập nhật task' : 'Đã tạo task', 'success');
+        if (attachWarn) showToast(`${t('task_saved')} ${attachWarn}`, 'error');
+        else showToast(taskId ? t('task_updated') : t('task_created'), 'success');
     } catch (err) { errorEl.textContent = 'Lỗi kết nối'; }
 }
 
@@ -680,7 +703,10 @@ vi: {
     dep_lbl: 'Phụ thuộc vào (Task B chỉ làm khi Task A xong)',
     ai_lbl: 'AI gợi ý checklist', ai_btn: '✨ AI chia nhỏ công việc', smart_btn: '🎯 Gợi ý người nhận',
     sub_h: 'Nhiệm vụ con', timer_h: 'Bấm giờ / Pomodoro (25 phút)', cmt_h: 'Bình luận (@mention)',
-    attach_h: 'Đính kèm (link + ghi chú)', send: 'Gửi'
+    attach_h: 'Đính kèm (link + ghi chú)', send: 'Gửi',
+    welcome_sub: 'Cùng xem tiến độ công việc của chi đoàn hôm nay.', import_btn2: 'Import PDF/DOC',
+    file_lbl: 'Đính kèm file (PDF / Word)', file_uploading: 'Đang đính kèm file...', file_conn_err: 'Lỗi kết nối khi upload file',
+    task_saved: 'Đã lưu task.', task_created: 'Đã tạo task', task_updated: 'Đã cập nhật task'
 },
 en: {
     nav_kanban: 'Kanban Board', nav_list: 'List', nav_points: 'Points overview', nav_finance: 'Finance',
@@ -735,7 +761,10 @@ en: {
     dep_lbl: 'Depends on (Task B only when Task A is done)',
     ai_lbl: 'AI checklist suggestions', ai_btn: '✨ AI split task', smart_btn: '🎯 Suggest assignee',
     sub_h: 'Subtasks', timer_h: 'Timer / Pomodoro (25 min)', cmt_h: 'Comments (@mention)',
-    attach_h: 'Attachments (link + note)', send: 'Send'
+    attach_h: 'Attachments (link + note)', send: 'Send',
+    welcome_sub: "Let's check the team's progress today.", import_btn2: 'Import PDF/DOC',
+    file_lbl: 'Attach file (PDF / Word)', file_uploading: 'Uploading file...', file_conn_err: 'Connection error while uploading file',
+    task_saved: 'Task saved.', task_created: 'Task created', task_updated: 'Task updated'
 }
 };
 function curLang() { return localStorage.getItem('lang') || (currentUser && currentUser.language) || 'vi'; }
@@ -917,7 +946,26 @@ function applyLang(lang) {
         fsc.options[0].textContent = t('f_all_scope');
         fsc.options[1].textContent = t('scope_lang'); fsc.options[2].textContent = t('scope_xa');
     }
+    updateWelcome();
     renderTasks();
+}
+
+// ==================== WELCOME ====================
+function updateWelcome() {
+    const dateEl = document.getElementById('welcomeDate');
+    const titleEl = document.getElementById('welcomeTitle');
+    if (!dateEl || !titleEl) return;
+    const lang = curLang();
+    const now = new Date();
+    try {
+        dateEl.textContent = new Intl.DateTimeFormat(lang === 'en' ? 'en-US' : 'vi-VN', { weekday: 'long', day: 'numeric', month: 'long' }).format(now).toUpperCase();
+    } catch (e) { dateEl.textContent = now.toLocaleDateString(); }
+    const name = currentUser ? (currentUser.full_name || currentUser.username) : '';
+    const hour = now.getHours();
+    const greet = lang === 'en'
+        ? (hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening')
+        : (hour < 11 ? 'Chào buổi sáng' : hour < 13 ? 'Chào buổi trưa' : hour < 18 ? 'Chào buổi chiều' : 'Chào buổi tối');
+    titleEl.textContent = name ? greet + ', ' + name : greet;
 }
 
 async function changePassword() {

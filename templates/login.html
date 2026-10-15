@@ -6,13 +6,48 @@
 <div class="bg-circle bg3"></div>
 
 <div class="auth-wrapper">
-    <div class="auth-flip" id="authCard">
+    <div class="login-shell">
+        <aside class="login-showcase">
+            <div class="brand">
+                <div class="logo logo-doan"><img src="/static/images/logo-doan.webp" alt="Logo Đoàn"></div>
+                <div class="brand-copy">
+                    <strong>Đoàn TN Lam Khê</strong>
+                    <small>Tuổi trẻ · Tiên phong · Trách nhiệm</small>
+                </div>
+            </div>
+            <div class="showcase-copy">
+                <span class="eyebrow">Không gian làm việc số</span>
+                <h1>Cùng nhau tạo nên những điều <em>ý nghĩa.</em></h1>
+                <p>Quản lý công việc, kết nối đoàn viên và lan toả tinh thần tuổi trẻ trong một không gian duy nhất.</p>
+            </div>
+            <div class="showcase-preview">
+                <div class="preview-head">
+                    <span>Tiến độ tuần này</span>
+                    <strong>82%</strong>
+                </div>
+                <div class="preview-chart">
+                    <i style="height:38%"></i><i style="height:56%"></i><i style="height:44%"></i><i style="height:74%"></i><i style="height:61%"></i><i style="height:88%"></i><i style="height:82%"></i>
+                </div>
+                <div class="preview-foot">
+                    <span><b>12</b> nhiệm vụ</span>
+                    <span><b>08</b> đã hoàn thành</span>
+                </div>
+            </div>
+            <div class="showcase-note">
+                <div class="member-stack">
+                    <i>H</i><i>L</i><i>M</i><i>+</i>
+                </div>
+                <span>Đoàn viên đang cùng hoạt động</span>
+            </div>
+        </aside>
+        <div class="auth-flip" id="authCard">
 
-        <!-- Login -->
-        <div class="form-panel login-panel">
-            <div class="logo logo-doan auth-logo"><img src="/static/images/logo-doan.webp" alt="Logo Đoàn"></div>
-            <h1>Xin chào</h1>
-            <p class="subtitle">Đăng nhập để tiếp tục</p>
+            <!-- Login -->
+            <div class="form-panel login-panel">
+                <div class="logo logo-doan auth-logo"><img src="/static/images/logo-doan.webp" alt="Logo Đoàn"></div>
+                <span class="eyebrow">Chào mừng trở lại</span>
+                <h1>Xin chào</h1>
+                <p class="subtitle">Đăng nhập để tiếp tục</p>
 
             <form id="loginForm">
                 <div class="input-group">
@@ -47,6 +82,7 @@
         <!-- Register -->
         <div class="form-panel signup-panel">
             <div class="logo logo-doan auth-logo"><img src="/static/images/logo-doan.webp" alt="Logo Đoàn"></div>
+            <span class="eyebrow">Gia nhập chi đoàn</span>
             <h1>Tạo tài khoản</h1>
             <p class="subtitle">Bắt đầu cùng Đoàn TN thôn Lam Khê</p>
 
@@ -87,7 +123,9 @@
             </div>
         </div>
 
+        </div>
     </div>
+    <p class="login-footer">© 2025 Đoàn TN thôn Lam Khê · Hệ thống quản lý công việc</p>
 </div>
 {% endblock %}
 {% block scripts %}

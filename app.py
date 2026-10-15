@@ -1213,6 +1213,45 @@ def api_import_tasks_file():
     return jsonify({'message': f'Đã tạo task "{title}" với file đính kèm', 'tasks': [{'id': tid, 'title': title}]}), 201
 
 
+@app.route('/api/tasks/<int:task_id>/file', methods=['POST'])
+@login_required
+@admin_required
+def api_upload_task_file(task_id):
+    if 'file' not in request.files:
+        return jsonify({'error': 'Không có file'}), 400
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'error': 'Chưa chọn file'}), 400
+
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in ('pdf', 'doc', 'docx'):
+        return jsonify({'error': 'Chỉ hỗ trợ file .pdf, .doc, .docx'}), 400
+
+    conn = get_db()
+    cur = conn.cursor()
+    task = cur.execute(q("SELECT id FROM tasks WHERE id = %s", "SELECT id FROM tasks WHERE id = ?"), (task_id,)).fetchone()
+    if not task:
+        conn.close()
+        return jsonify({'error': 'Task không tồn tại'}), 404
+
+    import uuid, os
+    uploads_dir = os.path.join(os.path.dirname(__file__), 'uploads')
+    os.makedirs(uploads_dir, exist_ok=True)
+
+    safe_name = f"{uuid.uuid4().hex[:8]}_{file.filename}"
+    file_path = os.path.join(uploads_dir, safe_name)
+    file.save(file_path)
+    file_size = os.path.getsize(file_path)
+
+    att_url = f"/api/tasks/{task_id}/file/{safe_name}"
+    cur.execute(q("INSERT INTO attachments (task_id, filename, url, note, size, created_by) VALUES (%s, %s, %s, %s, %s, %s)",
+                  "INSERT INTO attachments (task_id, filename, url, note, size, created_by) VALUES (?, ?, ?, ?, ?, ?)"),
+                (task_id, file.filename, att_url, '', file_size, session['user_id']))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': f'Đã đính kèm file "{file.filename}"', 'url': att_url}), 201
+
+
 @app.route('/api/tasks/<int:task_id>/file/<path:filename>')
 @login_required
 def api_serve_file(task_id, filename):

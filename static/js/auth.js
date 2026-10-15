@@ -1,3 +1,11 @@
+(function initLoginTheme() {
+    const v = localStorage.getItem('theme') || 'dark';
+    const resolved = v === 'system'
+        ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+        : v;
+    document.documentElement.setAttribute('data-theme', resolved);
+})();
+
 document.addEventListener('DOMContentLoaded', () => {
     const loginForm = document.getElementById('loginForm');
     const registerForm = document.getElementById('registerForm');
