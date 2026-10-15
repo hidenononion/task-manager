@@ -68,7 +68,7 @@ function toggleTheme() {
 
 function updateThemeUI(theme) {
     document.getElementById('themeIcon').innerHTML = theme === 'dark' ? '&#9790;' : '&#9728;';
-    document.getElementById('themeLabel').textContent = theme === 'dark' ? 'Chế độ sáng' : 'Chế độ tối';
+    document.getElementById('themeLabel').textContent = theme === 'dark' ? 'Chế độ tối' : 'Chế độ sáng';
 }
 
 // ==================== NAV ====================
