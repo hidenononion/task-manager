@@ -427,6 +427,7 @@ def init_db():
     try:
         ensure_column(cur, 'attachments', 'note', "TEXT DEFAULT ''")
         ensure_column(cur, 'attachments', 'url', "TEXT DEFAULT ''")
+        ensure_column(cur, 'attachments', 'file_data', q('BYTEA', 'BLOB'))
     except Exception:
         pass
 
@@ -1204,8 +1205,10 @@ def api_import_tasks_file():
 
     safe_name = f"{uuid.uuid4().hex[:8]}_{file.filename}"
     file_path = os.path.join(uploads_dir, safe_name)
-    file.save(file_path)
-    file_size = os.path.getsize(file_path)
+    raw = file.read()
+    with open(file_path, 'wb') as _f:
+        _f.write(raw)
+    file_size = len(raw)
 
     title = os.path.splitext(file.filename)[0].strip() or file.filename
     if len(title) > 500:
@@ -1220,9 +1223,9 @@ def api_import_tasks_file():
     tid = cur.fetchone()['id'] if is_pg() else cur.lastrowid
 
     att_url = f"/api/tasks/{tid}/file/{safe_name}"
-    cur.execute(q("INSERT INTO attachments (task_id, filename, url, note, size, created_by) VALUES (%s, %s, %s, %s, %s, %s)",
-                  "INSERT INTO attachments (task_id, filename, url, note, size, created_by) VALUES (?, ?, ?, ?, ?, ?)"),
-                (tid, file.filename, att_url, '', file_size, session['user_id']))
+    cur.execute(q("INSERT INTO attachments (task_id, filename, url, note, size, file_data, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                  "INSERT INTO attachments (task_id, filename, url, note, size, file_data, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)"),
+                (tid, file.filename, att_url, '', file_size, raw, session['user_id']))
     conn.commit()
     conn.close()
 
@@ -1256,13 +1259,15 @@ def api_upload_task_file(task_id):
 
     safe_name = f"{uuid.uuid4().hex[:8]}_{file.filename}"
     file_path = os.path.join(uploads_dir, safe_name)
-    file.save(file_path)
-    file_size = os.path.getsize(file_path)
+    raw = file.read()
+    with open(file_path, 'wb') as _f:
+        _f.write(raw)
+    file_size = len(raw)
 
     att_url = f"/api/tasks/{task_id}/file/{safe_name}"
-    cur.execute(q("INSERT INTO attachments (task_id, filename, url, note, size, created_by) VALUES (%s, %s, %s, %s, %s, %s)",
-                  "INSERT INTO attachments (task_id, filename, url, note, size, created_by) VALUES (?, ?, ?, ?, ?, ?)"),
-                (task_id, file.filename, att_url, '', file_size, session['user_id']))
+    cur.execute(q("INSERT INTO attachments (task_id, filename, url, note, size, file_data, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                  "INSERT INTO attachments (task_id, filename, url, note, size, file_data, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)"),
+                (task_id, file.filename, att_url, '', file_size, raw, session['user_id']))
     conn.commit()
     conn.close()
     return jsonify({'message': f'Đã đính kèm file "{file.filename}"', 'url': att_url}), 201
@@ -1274,13 +1279,38 @@ def api_serve_file(task_id, filename):
     import os as _os
     uploads_dir = _os.path.join(_os.path.dirname(__file__), 'uploads')
     safe = _os.path.basename(filename)
+    ext = safe.rsplit('.', 1)[-1].lower() if '.' in safe else ''
+    mime_map = {'pdf': 'application/pdf', 'doc': 'application/msword', 'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
+    mime = mime_map.get(ext, 'application/octet-stream')
+    # 1) Serve from DB bytes (survives redeploys wiping uploads/)
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        row = cur.execute(q("SELECT filename, file_data FROM attachments WHERE url = %s",
+                            "SELECT filename, file_data FROM attachments WHERE url = ?"),
+                          (f"/api/tasks/{task_id}/file/{safe}",)).fetchone()
+        conn.close()
+    except Exception:
+        row = None
+    blob = None
+    if row:
+        try:
+            blob = bytes(row['file_data']) if row['file_data'] is not None else None
+        except Exception:
+            blob = None
+    if blob:
+        from urllib.parse import quote as _quote
+        try:
+            orig = row['filename'] or safe
+        except Exception:
+            orig = safe
+        disp = f'inline; filename="{safe}"; filename*=UTF-8\'\'{_quote(orig)}'
+        return Response(blob, mimetype=mime, headers={'Content-Disposition': disp})
+    # 2) Disk fallback (older uploads still on disk)
     file_path = _os.path.join(uploads_dir, safe)
     if not _os.path.isfile(file_path):
         return jsonify({'error': 'File không tồn tại'}), 404
 
-    ext = safe.rsplit('.', 1)[-1].lower() if '.' in safe else ''
-    mime_map = {'pdf': 'application/pdf', 'doc': 'application/msword', 'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
-    mime = mime_map.get(ext, 'application/octet-stream')
     from flask import send_file
     return send_file(file_path, mimetype=mime, as_attachment=False, download_name=safe)
 
@@ -1744,8 +1774,8 @@ def api_attachments(task_id):
     cur = conn.cursor()
     if request.method == 'GET':
         try:
-            rows = cur.execute(q("SELECT * FROM attachments WHERE task_id = %s ORDER BY id",
-                                 "SELECT * FROM attachments WHERE task_id = ? ORDER BY id"), (task_id,)).fetchall()
+            rows = cur.execute(q("SELECT id, task_id, filename, url, note, size, created_by FROM attachments WHERE task_id = %s ORDER BY id",
+                                 "SELECT id, task_id, filename, url, note, size, created_by FROM attachments WHERE task_id = ? ORDER BY id"), (task_id,)).fetchall()
             conn.close()
             return jsonify([dict(r) for r in rows])
         except Exception:
