@@ -1835,6 +1835,12 @@ def api_unclaim_task(task_id):
 
     cur.execute(q("DELETE FROM task_assignments WHERE task_id = %s AND user_id = %s",
                   "DELETE FROM task_assignments WHERE task_id = ? AND user_id = ?"), (task_id, target_user))
+    remaining = cur.execute(q("SELECT COUNT(*) as c FROM task_assignments WHERE task_id = %s",
+                              "SELECT COUNT(*) as c FROM task_assignments WHERE task_id = ?"),
+                            (task_id,)).fetchone()['c']
+    if remaining == 0 and task['status'] == 'in_progress':
+        cur.execute(q("UPDATE tasks SET status = 'pending' WHERE id = %s",
+                      "UPDATE tasks SET status = 'pending' WHERE id = ?"), (task_id,))
     conn.commit()
     updated = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
     result = serialize_task(conn, updated, session['user_id'])
