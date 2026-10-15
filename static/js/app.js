@@ -61,6 +61,8 @@ function toggleTheme() {
     localStorage.setItem('theme', next);
     document.documentElement.setAttribute('data-theme', resolveTheme(next));
     updateThemeUI(next);
+    const sel = document.getElementById('setTheme');
+    if (sel) sel.value = next;
     if (currentUser) savePrefs(true);
 }
 
