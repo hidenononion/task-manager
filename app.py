@@ -34,6 +34,22 @@ if not os.getenv('GOOGLE_CLIENT_ID'):
 app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 
+
+def _static_version(filename):
+    try:
+        return int(os.path.getmtime(os.path.join(app.static_folder, filename)))
+    except Exception:
+        return 0
+
+
+@app.context_processor
+def inject_static_versions():
+    return {
+        'css_version': _static_version(os.path.join('css', 'style.css')),
+        'appjs_version': _static_version(os.path.join('js', 'app.js')),
+        'authjs_version': _static_version(os.path.join('js', 'auth.js')),
+    }
+
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)

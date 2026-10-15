@@ -805,5 +805,5 @@
 <div id="toast" class="toast"></div>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}?v={{ appjs_version }}"></script>
 {% endblock %}
