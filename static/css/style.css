@@ -1255,18 +1255,22 @@ a:hover {
 /* ===== GLOW NAV (Top bar) ===== */
 .glow-nav {
     position: sticky;
-    top: 0;
+    top: 16px;
     z-index: 9;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    height: 74px;
-    padding: 0 24px;
-    background: rgba(13, 13, 19, 0.82);
+    width: min(calc(100% - 48px), 1460px);
+    height: 72px;
+    margin: 20px auto 0;
+    padding: 0 18px 0 24px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 36px;
+    background: rgba(13, 13, 19, 0.85);
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.05), 0 18px 42px rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .glow-brand {
@@ -2346,7 +2350,7 @@ select option {
 @media (max-width: 1100px) {
     .glow-nav {
         gap: 10px;
-        padding: 0 16px;
+        padding: 0 14px 0 18px;
     }
 
     .glow-brand .brand-tag {
@@ -2454,12 +2458,8 @@ select option {
     .glow-nav {
         flex-wrap: nowrap;
         gap: 6px;
-        height: 60px;
-        padding: 4px 8px;
-    }
-
-    [data-theme="light"] .glow-nav {
         width: calc(100% - 24px);
+        height: 60px;
         margin-top: 12px;
         top: 8px;
         padding: 4px 10px 4px 14px;
@@ -3054,13 +3054,7 @@ select option {
 }
 
 [data-theme="light"] .glow-nav {
-    width: min(calc(100% - 48px), 1460px);
-    height: 72px;
-    margin: 20px auto 0;
-    top: 16px;
-    padding: 0 18px 0 24px;
     border: 1px solid rgba(255, 255, 255, 0.54);
-    border-radius: 36px;
     background: rgba(235, 241, 255, 0.35);
     box-shadow: inset 1px 1px rgba(255, 255, 255, 0.75), 0 18px 42px rgba(77, 91, 164, 0.16);
     backdrop-filter: blur(22px);
