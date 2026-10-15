@@ -214,7 +214,7 @@ function createTaskCard(task) {
     const isAdmin = currentUser.role === 'bithu';
     const isClaimed = task.is_claimed_by_me;
     const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
-    const canClaim = !isAdmin && !isClaimed && task.slots_left > 0 && task.status !== 'done';
+    const canClaim = !isClaimed && task.slots_left > 0 && task.status !== 'done';
 
     let adminActions = '';
     if (isAdmin) {
@@ -227,7 +227,7 @@ function createTaskCard(task) {
 
     let claimBtn = '';
     if (canClaim) claimBtn = `<button class="btn btn-claim" onclick="claimTask(${task.id})">${t('claim')}</button>`;
-    else if (isClaimed && !isAdmin) claimBtn = `<button class="btn btn-unclaim" onclick="unclaimTask(${task.id})">${t('unclaim')}</button>`;
+    else if (isClaimed) claimBtn = `<button class="btn btn-unclaim" onclick="unclaimTask(${task.id})">${t('unclaim')}</button>`;
 
     let statusSelect = '';
     if (isClaimed || isAdmin) {
@@ -267,11 +267,11 @@ function renderList(tasks) {
         const isAdmin = currentUser.role === 'bithu';
         const isClaimed = task.is_claimed_by_me;
         const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
-        const canClaim = !isAdmin && !isClaimed && task.slots_left > 0 && task.status !== 'done';
+        const canClaim = !isClaimed && task.slots_left > 0 && task.status !== 'done';
         let adminActions = isAdmin ? `<button class="btn-icon" onclick="openEditModal(${task.id})">&#9998;</button><button class="btn-icon" onclick="openDeleteModal(${task.id}, '${escapeHtml(task.title)}')">&#10005;</button>` : '';
         const assigneeNames = task.assigned_users.map(u => escapeHtml(u.username)).join(', ');
         let statusCell = (isClaimed || isAdmin) ? `<select class="status-select" onchange="changeStatus(${task.id}, this.value)"><option value="pending" ${task.status === 'pending' ? 'selected' : ''}>${getStatusLabel('pending')}</option><option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>${getStatusLabel('in_progress')}</option><option value="done" ${task.status === 'done' ? 'selected' : ''}>${getStatusLabel('done')}</option></select>` : `<span class="status-label">${getStatusLabel(task.status)}</span>`;
-        let claimBtn = canClaim ? `<button class="btn btn-claim btn-sm" onclick="claimTask(${task.id})">${t('claim_sm')}</button>` : isClaimed && !isAdmin ? `<button class="btn btn-unclaim btn-sm" onclick="unclaimTask(${task.id})">${t('unclaim')}</button>` : '';
+        let claimBtn = canClaim ? `<button class="btn btn-claim btn-sm" onclick="claimTask(${task.id})">${t('claim_sm')}</button>` : isClaimed ? `<button class="btn btn-unclaim btn-sm" onclick="unclaimTask(${task.id})">${t('unclaim')}</button>` : '';
         return `<tr><td>${bulkMode ? `<input type="checkbox" class="bulk-check" value="${task.id}" onchange="toggleBulkOne(this)"> ` : ''}<div class="task-title-cell" onclick="openTaskDetail(${task.id})" style="cursor:pointer;display:inline-block;">${escapeHtml(task.title)}${task.description ? `<small>${escapeHtml(task.description.substring(0, 60))}${task.description.length > 60 ? '...' : ''}</small>` : ''}</div></td><td><span class="priority-tag ${task.scope === 'xa' ? 'high' : 'low'}">${getScopeLabel(task.scope)}</span></td><td>${statusCell}</td><td><span class="priority-tag ${task.priority}">${getPriorityLabel(task.priority)}</span></td><td>${assigneeNames || `<span style="color:var(--text-muted)">${t('no_one')}</span>`}</td><td><span class="slot-info">${task.assignee_count}/${task.max_assignees}</span></td><td>${task.points > 0 ? `<span class="priority-tag low">+${task.points}</span>` : '-'}</td><td>${task.due_date ? `<span class="due-date ${isOverdue ? 'overdue' : ''}">${formatDate(task.due_date)}</span>` : '-'}</td><td>${adminActions}${claimBtn}</td></tr>`;
     }).join('');
 }
@@ -402,6 +402,7 @@ async function claimTask(taskId) {
         const data = await res.json();
         if (!res.ok) { showToast(data.error, 'error'); return; }
         await loadTasks();
+        refreshDetailClaim();
         showToast('Đã nhận task', 'success');
     } catch (err) { showToast('Lỗi kết nối', 'error'); }
 }
@@ -412,8 +413,25 @@ async function unclaimTask(taskId) {
         const data = await res.json();
         if (!res.ok) { showToast(data.error, 'error'); return; }
         await loadTasks();
+        refreshDetailClaim();
         showToast('Đã bỏ nhận', 'success');
     } catch (err) { showToast('Lỗi kết nối', 'error'); }
+}
+
+function renderDetailClaim(task) {
+    const box = document.getElementById('taskDetailClaim');
+    if (!box || !task) return;
+    const isClaimed = task.is_claimed_by_me;
+    const canClaim = !isClaimed && task.slots_left > 0 && task.status !== 'done';
+    if (canClaim) box.innerHTML = `<button class="btn btn-claim" onclick="claimTask(${task.id})">${t('claim')} (${task.slots_left})</button>`;
+    else if (isClaimed) box.innerHTML = `<button class="btn btn-unclaim" onclick="unclaimTask(${task.id})">${t('unclaim')}</button>`;
+    else box.innerHTML = '';
+}
+
+function refreshDetailClaim() {
+    if (!detailTaskId) return;
+    const task = allTasks.find(x => x.id === detailTaskId);
+    if (task) renderDetailClaim(task);
 }
 
 async function changeStatus(taskId, newStatus) {
@@ -1234,6 +1252,7 @@ async function openTaskDetail(id) {
     const hrs = (task.actual_seconds || 0) / 3600;
     document.getElementById('taskDetailMeta').innerHTML =
         `${getStatusLabel(task.status)} • ⏱ ${hrs.toFixed(1)}h${task.estimate_hours ? ` / ước lượng ${task.estimate_hours}h` : ''} • 💬 ${task.comment_count || 0}${(task.depends_on || []).length ? ` • ⛓ phụ thuộc #${task.depends_on.join(', #')}` : ''}`;
+    renderDetailClaim(task);
     document.getElementById('taskDetailModal').classList.add('active');
     loadSubs(); loadComments(); loadAttaches(); resetPom();
 }
