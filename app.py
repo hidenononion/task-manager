@@ -1182,6 +1182,29 @@ def api_create_task():
     return jsonify(result), 201
 
 
+def _save_attachment(cur, task_id, filename, url, size, raw, user_id):
+    try:
+        cur.execute("SAVEPOINT attach_file")
+    except Exception:
+        pass
+    try:
+        cur.execute(q("INSERT INTO attachments (task_id, filename, url, note, size, file_data, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                      "INSERT INTO attachments (task_id, filename, url, note, size, file_data, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)"),
+                    (task_id, filename, url, '', size, raw, user_id))
+    except Exception:
+        try:
+            cur.execute("ROLLBACK TO SAVEPOINT attach_file")
+        except Exception:
+            pass
+        cur.execute(q("INSERT INTO attachments (task_id, filename, url, note, size, created_by) VALUES (%s, %s, %s, %s, %s, %s)",
+                      "INSERT INTO attachments (task_id, filename, url, note, size, created_by) VALUES (?, ?, ?, ?, ?, ?)"),
+                    (task_id, filename, url, '', size, user_id))
+    try:
+        cur.execute("RELEASE SAVEPOINT attach_file")
+    except Exception:
+        pass
+
+
 @app.route('/api/tasks/import', methods=['POST'])
 @login_required
 @admin_required
@@ -1206,6 +1229,8 @@ def api_import_tasks_file():
     safe_name = f"{uuid.uuid4().hex[:8]}_{file.filename}"
     file_path = os.path.join(uploads_dir, safe_name)
     raw = file.read()
+    if len(raw) > 20 * 1024 * 1024:
+        return jsonify({'error': 'File quá lớn (tối đa 20MB)'}), 400
     with open(file_path, 'wb') as _f:
         _f.write(raw)
     file_size = len(raw)
@@ -1223,9 +1248,7 @@ def api_import_tasks_file():
     tid = cur.fetchone()['id'] if is_pg() else cur.lastrowid
 
     att_url = f"/api/tasks/{tid}/file/{safe_name}"
-    cur.execute(q("INSERT INTO attachments (task_id, filename, url, note, size, file_data, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                  "INSERT INTO attachments (task_id, filename, url, note, size, file_data, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)"),
-                (tid, file.filename, att_url, '', file_size, raw, session['user_id']))
+    _save_attachment(cur, tid, file.filename, att_url, file_size, raw, session['user_id'])
     conn.commit()
     conn.close()
 
@@ -1260,14 +1283,15 @@ def api_upload_task_file(task_id):
     safe_name = f"{uuid.uuid4().hex[:8]}_{file.filename}"
     file_path = os.path.join(uploads_dir, safe_name)
     raw = file.read()
+    if len(raw) > 20 * 1024 * 1024:
+        conn.close()
+        return jsonify({'error': 'File quá lớn (tối đa 20MB)'}), 400
     with open(file_path, 'wb') as _f:
         _f.write(raw)
     file_size = len(raw)
 
     att_url = f"/api/tasks/{task_id}/file/{safe_name}"
-    cur.execute(q("INSERT INTO attachments (task_id, filename, url, note, size, file_data, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                  "INSERT INTO attachments (task_id, filename, url, note, size, file_data, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)"),
-                (task_id, file.filename, att_url, '', file_size, raw, session['user_id']))
+    _save_attachment(cur, task_id, file.filename, att_url, file_size, raw, session['user_id'])
     conn.commit()
     conn.close()
     return jsonify({'message': f'Đã đính kèm file "{file.filename}"', 'url': att_url}), 201
