@@ -12,6 +12,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupNav();
     await loadTasks();
     await loadUsers();
+    loadNotifs();
+    setInterval(loadNotifs, 45000);
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.notif-wrap')) {
+            const d = document.getElementById('notifDrop');
+            if (d) d.style.display = 'none';
+        }
+    });
 });
 
 async function loadUser() {
@@ -728,7 +736,11 @@ vi: {
     attach_h: 'Đính kèm (link + ghi chú)', send: 'Gửi',
     welcome_sub: 'Cùng xem tiến độ công việc của chi đoàn hôm nay.', import_btn2: 'Import PDF/DOC',
     file_lbl: 'Đính kèm file (PDF / Word)', file_uploading: 'Đang đính kèm file...', file_conn_err: 'Lỗi kết nối khi upload file',
-    task_saved: 'Đã lưu task.', task_created: 'Đã tạo task', task_updated: 'Đã cập nhật task'
+    task_saved: 'Đã lưu task.', task_created: 'Đã tạo task', task_updated: 'Đã cập nhật task',
+    notif_title: 'Thông báo', notif_empty: 'Chưa có thông báo', notif_read_all: 'Đã đọc tất cả',
+    sql_h: 'SQL ngoài (đồng bộ)', sql_type: 'Loại CSDL', sql_host: 'Host', sql_port: 'Port',
+    sql_db: 'Database', sql_user: 'Username', sql_pass: 'Password', sql_prefix: 'Tiền tố bảng',
+    sql_test_btn: 'Kiểm tra kết nối', sql_save_btn: 'Lưu cấu hình', sql_sync_btn: 'Đồng bộ ngay'
 },
 en: {
     nav_kanban: 'Kanban Board', nav_list: 'List', nav_points: 'Points overview', nav_finance: 'Finance',
@@ -786,7 +798,11 @@ en: {
     attach_h: 'Attachments (link + note)', send: 'Send',
     welcome_sub: "Let's check the team's progress today.", import_btn2: 'Import PDF/DOC',
     file_lbl: 'Attach file (PDF / Word)', file_uploading: 'Uploading file...', file_conn_err: 'Connection error while uploading file',
-    task_saved: 'Task saved.', task_created: 'Task created', task_updated: 'Task updated'
+    task_saved: 'Task saved.', task_created: 'Task created', task_updated: 'Task updated',
+    notif_title: 'Notifications', notif_empty: 'No notifications', notif_read_all: 'Mark all read',
+    sql_h: 'External SQL (sync)', sql_type: 'Database type', sql_host: 'Host', sql_port: 'Port',
+    sql_db: 'Database', sql_user: 'Username', sql_pass: 'Password', sql_prefix: 'Table prefix',
+    sql_test_btn: 'Test connection', sql_save_btn: 'Save config', sql_sync_btn: 'Sync now'
 }
 };
 function curLang() { return localStorage.getItem('lang') || (currentUser && currentUser.language) || 'vi'; }
@@ -891,7 +907,7 @@ function fillSettings() {
 
 async function loadSettings() {
     fillSettings();
-    loadLoginHistory(); loadRules(); loadWebhooks(); loadTrash(); loadStorage();
+    loadLoginHistory(); loadRules(); loadWebhooks(); loadTrash(); loadStorage(); loadSqlConfig();
     if (currentUser && currentUser.role === 'bithu') { loadRules(); loadWebhooks(); loadTrash(); }
 }
 
@@ -988,6 +1004,100 @@ function updateWelcome() {
         ? (hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening')
         : (hour < 11 ? 'Chào buổi sáng' : hour < 13 ? 'Chào buổi trưa' : hour < 18 ? 'Chào buổi chiều' : 'Chào buổi tối');
     titleEl.textContent = name ? greet + ', ' + name : greet;
+}
+
+// ==================== NOTIFICATIONS ====================
+async function loadNotifs() {
+    try {
+        const res = await fetch('/api/notifications');
+        if (!res.ok) return;
+        const data = await res.json();
+        const badge = document.getElementById('notifBadge');
+        if (badge) {
+            badge.style.display = data.unread > 0 ? '' : 'none';
+            badge.textContent = data.unread > 99 ? '99+' : data.unread;
+        }
+        const list = document.getElementById('notifList');
+        if (list) {
+            list.innerHTML = (data.items || []).length ? data.items.map(n => `
+                <div class="notif-item ${n.is_read ? '' : 'unread'}">
+                    <div class="notif-item-title">${escapeHtml(n.title || '')}</div>
+                    ${n.body ? `<div class="notif-item-body">${escapeHtml(n.body)}</div>` : ''}
+                    <div class="notif-item-time">${escapeHtml(n.created_at || '')}</div>
+                </div>`).join('') : `<div class="empty-state"><p>${t('notif_empty')}</p></div>`;
+        }
+    } catch (e) { /* ignore */ }
+}
+
+function toggleNotif(e) {
+    if (e) e.stopPropagation();
+    const d = document.getElementById('notifDrop');
+    if (d) d.style.display = d.style.display === 'none' ? 'block' : 'none';
+}
+
+async function readAllNotifs() {
+    try {
+        await fetch('/api/notifications/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    } catch (e) { /* ignore */ }
+    loadNotifs();
+}
+
+// ==================== EXTERNAL SQL ====================
+function sqlPayload() {
+    const v = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+    return {
+        dbtype: document.getElementById('sqlType') ? document.getElementById('sqlType').value : 'mysql',
+        host: v('sqlHost'), port: v('sqlPort'), dbname: v('sqlDb'),
+        username: v('sqlUser'), password: document.getElementById('sqlPass') ? document.getElementById('sqlPass').value : '',
+        table_prefix: v('sqlPrefix') || 'lamkhe_'
+    };
+}
+
+async function loadSqlConfig() {
+    if (!currentUser || currentUser.role !== 'bithu') return;
+    try {
+        const res = await fetch('/api/integrations/sql');
+        if (!res.ok) return;
+        const c = await res.json();
+        const set = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined && v !== null) el.value = v; };
+        set('sqlType', c.dbtype || 'mysql'); set('sqlHost', c.host || '');
+        set('sqlPort', c.port || ''); set('sqlDb', c.dbname || '');
+        set('sqlUser', c.username || ''); set('sqlPrefix', c.table_prefix || 'lamkhe_');
+        const pw = document.getElementById('sqlPass');
+        if (pw) { pw.value = ''; pw.placeholder = c.password ? '(đã lưu — để trống giữ nguyên)' : '••••••'; }
+    } catch (e) { /* ignore */ }
+}
+
+async function saveSql() {
+    const el = document.getElementById('sqlResult');
+    if (el) el.textContent = '...';
+    try {
+        const res = await fetch('/api/integrations/sql', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sqlPayload()) });
+        const data = await res.json();
+        if (el) { el.textContent = data.message || data.error || ''; el.style.color = res.ok ? 'var(--success)' : 'var(--danger)'; }
+        if (res.ok) showToast(data.message, 'success'); else showToast(data.error, 'error');
+    } catch (e) { if (el) el.textContent = 'Lỗi kết nối'; }
+}
+
+async function testSql() {
+    const el = document.getElementById('sqlResult');
+    if (el) el.textContent = 'Đang kiểm tra...';
+    try {
+        const res = await fetch('/api/integrations/sql/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sqlPayload()) });
+        const data = await res.json();
+        if (el) { el.textContent = res.ok ? `${data.message}: ${(data.version || '').split('\n')[0]}` : (data.error || 'Lỗi'); el.style.color = res.ok ? 'var(--success)' : 'var(--danger)'; }
+    } catch (e) { if (el) el.textContent = 'Lỗi kết nối'; }
+}
+
+async function syncSql() {
+    const el = document.getElementById('sqlResult');
+    if (el) el.textContent = 'Đang đồng bộ...';
+    try {
+        const res = await fetch('/api/integrations/sql/sync', { method: 'POST' });
+        const data = await res.json();
+        if (el) { el.textContent = data.message || data.error || ''; el.style.color = res.ok ? 'var(--success)' : 'var(--danger)'; }
+        if (res.ok) showToast(data.message, 'success'); else showToast(data.error, 'error');
+    } catch (e) { if (el) el.textContent = 'Lỗi kết nối'; }
 }
 
 async function changePassword() {

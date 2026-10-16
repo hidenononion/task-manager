@@ -1252,6 +1252,118 @@ a:hover {
     font-size: 14px;
 }
 
+/* ===== NOTIFICATIONS ===== */
+.notif-wrap {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.notif-btn {
+    position: relative;
+    margin-bottom: 0;
+}
+
+.notif-badge {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 10px;
+    background: #f0443e;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 10px rgba(240, 68, 62, 0.6);
+    line-height: 1;
+}
+
+.notif-drop {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    width: 320px;
+    max-width: calc(100vw - 24px);
+    max-height: 380px;
+    overflow-y: auto;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: var(--shadow-lg);
+    z-index: 50;
+}
+
+.notif-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: inherit;
+    border-radius: 14px 14px 0 0;
+    z-index: 1;
+}
+
+.notif-head strong {
+    font-size: 14px;
+}
+
+.notif-readall {
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    padding: 2px 4px;
+}
+
+.notif-item {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+}
+
+.notif-item:last-child {
+    border-bottom: none;
+}
+
+.notif-item.unread {
+    background: var(--accent-light);
+}
+
+.notif-item-title {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.45;
+}
+
+.notif-item-body {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.notif-item-time {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 3px;
+}
+
+[data-theme="light"] .notif-drop {
+    background: rgba(232, 240, 254, 0.92);
+    border-color: rgba(255, 255, 255, 0.6);
+    box-shadow: var(--shadow-lg);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+}
+
 /* ===== GLOW NAV (Top bar) ===== */
 .glow-nav {
     position: sticky;

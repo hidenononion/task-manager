@@ -222,6 +222,30 @@ def init_db():
                 created_at TEXT DEFAULT (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')
             )
         ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS notifications (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                type TEXT DEFAULT 'assign',
+                title TEXT DEFAULT '',
+                body TEXT DEFAULT '',
+                link TEXT DEFAULT '',
+                is_read INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS ext_sql_config (
+                id INTEGER PRIMARY KEY,
+                dbtype TEXT DEFAULT 'mysql',
+                host TEXT DEFAULT '',
+                port INTEGER DEFAULT 3306,
+                dbname TEXT DEFAULT '',
+                username TEXT DEFAULT '',
+                password TEXT DEFAULT '',
+                table_prefix TEXT DEFAULT 'lamkhe_'
+            )
+        ''')
     else:
         cur.executescript('''
             CREATE TABLE IF NOT EXISTS users (
@@ -356,6 +380,27 @@ def init_db():
                 created_by INTEGER,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (created_by) REFERENCES users(id)
+            );
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                type TEXT DEFAULT 'assign',
+                title TEXT DEFAULT '',
+                body TEXT DEFAULT '',
+                link TEXT DEFAULT '',
+                is_read INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS ext_sql_config (
+                id INTEGER PRIMARY KEY,
+                dbtype TEXT DEFAULT 'mysql',
+                host TEXT DEFAULT '',
+                port INTEGER DEFAULT 3306,
+                dbname TEXT DEFAULT '',
+                username TEXT DEFAULT '',
+                password TEXT DEFAULT '',
+                table_prefix TEXT DEFAULT 'lamkhe_'
             );
         ''')
 
@@ -1160,6 +1205,11 @@ def api_create_task():
     for uid in assigned_ids:
         cur.execute(q("INSERT INTO task_assignments (task_id, user_id) VALUES (%s, %s)",
                       "INSERT INTO task_assignments (task_id, user_id) VALUES (?, ?)"), (task_id, uid))
+    for uid in assigned_ids:
+        if uid != session['user_id']:
+            _notify_user(conn, uid, 'assign', f"Bạn được giao việc: {title}", f"#{task_id}", '')
+    if assigned_ids:
+        _push_assignment_chat(conn, task_id, title, assigned_ids, session['user_id'])
 
     for dep in (data.get('depends_on') or []):
         try:
@@ -1203,6 +1253,220 @@ def _save_attachment(cur, task_id, filename, url, size, raw, user_id):
         cur.execute("RELEASE SAVEPOINT attach_file")
     except Exception:
         pass
+
+
+def _notify_user(conn, user_id, ntype, title, body='', link=''):
+    try:
+        cur = conn.cursor()
+        cur.execute(q("INSERT INTO notifications (user_id, type, title, body, link) VALUES (%s, %s, %s, %s, %s)",
+                      "INSERT INTO notifications (user_id, type, title, body, link) VALUES (?, ?, ?, ?, ?)"),
+                    (user_id, ntype, (title or '')[:200], (body or '')[:500], (link or '')[:300]))
+    except Exception:
+        pass
+
+
+def _user_chat_urls(conn, user_id):
+    try:
+        cur = conn.cursor()
+        r = cur.execute(q("SELECT slack_url, teams_url FROM users WHERE id = %s",
+                          "SELECT slack_url, teams_url FROM users WHERE id = ?"), (user_id,)).fetchone()
+        if not r:
+            return []
+        d = dict(r)
+        return [u for u in [d.get('slack_url'), d.get('teams_url')] if u]
+    except Exception:
+        return []
+
+
+def _push_assignment_chat(conn, task_id, title, assignee_ids, actor_id):
+    try:
+        text = f"[LamKhe] Bạn được giao việc: {title} (#{task_id})"
+        urls = set()
+        for uid in list(assignee_ids or []) + [actor_id]:
+            for u in _user_chat_urls(conn, uid):
+                urls.add(u)
+        for u in urls:
+            post_json_best_effort(u, {'text': text})
+    except Exception:
+        pass
+
+
+@app.route('/api/notifications')
+@login_required
+def api_notifications():
+    conn = get_db()
+    cur = conn.cursor()
+    rows = cur.execute(q("SELECT id, type, title, body, link, is_read, created_at FROM notifications WHERE user_id = %s ORDER BY id DESC LIMIT 30",
+                         "SELECT id, type, title, body, link, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 30"),
+                       (session['user_id'],)).fetchall()
+    unread = cur.execute(q("SELECT COUNT(*) AS c FROM notifications WHERE user_id = %s AND is_read = 0",
+                           "SELECT COUNT(*) AS c FROM notifications WHERE user_id = ? AND is_read = 0"),
+                         (session['user_id'],)).fetchone()
+    conn.close()
+    return jsonify({'items': [dict(r) for r in rows], 'unread': dict(unread)['c'] if unread else 0})
+
+
+@app.route('/api/notifications/read', methods=['POST'])
+@login_required
+def api_notifications_read():
+    data = request.get_json() or {}
+    ids = [int(x) for x in (data.get('ids') or []) if str(x).isdigit()]
+    conn = get_db()
+    cur = conn.cursor()
+    if ids:
+        ph = ','.join(['%s'] * len(ids)) if is_pg() else ','.join(['?'] * len(ids))
+        cur.execute(q(f"UPDATE notifications SET is_read = 1 WHERE user_id = %s AND id IN ({ph})",
+                      f"UPDATE notifications SET is_read = 1 WHERE user_id = ? AND id IN ({ph})"),
+                    [session['user_id']] + ids)
+    else:
+        cur.execute(q("UPDATE notifications SET is_read = 1 WHERE user_id = %s",
+                      "UPDATE notifications SET is_read = 1 WHERE user_id = ?"), (session['user_id'],))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'ok'})
+
+
+def _ext_sql_connect(cfg):
+    dbtype = (cfg.get('dbtype') or 'mysql')
+    host = cfg.get('host') or 'localhost'
+    port = int(cfg.get('port') or (3306 if dbtype == 'mysql' else 5432))
+    if dbtype == 'mysql':
+        import pymysql
+        return pymysql.connect(host=host, port=port, user=cfg.get('username') or '',
+                               password=cfg.get('password') or '', database=cfg.get('dbname') or '',
+                               charset='utf8mb4', connect_timeout=8)
+    import psycopg
+    return psycopg.connect(host=host, port=port, dbname=cfg.get('dbname') or '',
+                           user=cfg.get('username') or '', password=cfg.get('password') or '',
+                           connect_timeout=8)
+
+
+def _get_ext_sql_config(conn):
+    try:
+        cur = conn.cursor()
+        row = cur.execute("SELECT * FROM ext_sql_config WHERE id = 1").fetchone()
+        return dict(row) if row else {}
+    except Exception:
+        return {}
+
+
+@app.route('/api/integrations/sql')
+@login_required
+@admin_required
+def api_ext_sql_get():
+    conn = get_db()
+    cfg = _get_ext_sql_config(conn)
+    conn.close()
+    if cfg.get('password'):
+        cfg['password'] = '••••••'
+    return jsonify(cfg)
+
+
+@app.route('/api/integrations/sql', methods=['PUT'])
+@login_required
+@admin_required
+def api_ext_sql_save():
+    data = request.get_json() or {}
+    dbtype = data.get('dbtype') if data.get('dbtype') in ('mysql', 'postgres') else 'mysql'
+    try:
+        port = int(data.get('port') or (3306 if dbtype == 'mysql' else 5432))
+    except Exception:
+        port = 3306 if dbtype == 'mysql' else 5432
+    conn = get_db()
+    cur = conn.cursor()
+    exists = cur.execute("SELECT id FROM ext_sql_config WHERE id = 1").fetchone()
+    pw = (data.get('password') or '')
+    if exists:
+        if pw in ('', '••••••'):
+            cur.execute(q("UPDATE ext_sql_config SET dbtype=%s, host=%s, port=%s, dbname=%s, username=%s, table_prefix=%s WHERE id=1",
+                          "UPDATE ext_sql_config SET dbtype=?, host=?, port=?, dbname=?, username=?, table_prefix=? WHERE id=1"),
+                        (dbtype, data.get('host') or '', port, data.get('dbname') or '',
+                         data.get('username') or '', data.get('table_prefix') or 'lamkhe_'))
+        else:
+            cur.execute(q("UPDATE ext_sql_config SET dbtype=%s, host=%s, port=%s, dbname=%s, username=%s, password=%s, table_prefix=%s WHERE id=1",
+                          "UPDATE ext_sql_config SET dbtype=?, host=?, port=?, dbname=?, username=?, password=?, table_prefix=? WHERE id=1"),
+                        (dbtype, data.get('host') or '', port, data.get('dbname') or '',
+                         data.get('username') or '', pw, data.get('table_prefix') or 'lamkhe_'))
+    else:
+        cur.execute(q("INSERT INTO ext_sql_config (id, dbtype, host, port, dbname, username, password, table_prefix) VALUES (1, %s, %s, %s, %s, %s, %s, %s)",
+                      "INSERT INTO ext_sql_config (id, dbtype, host, port, dbname, username, password, table_prefix) VALUES (1, ?, ?, ?, ?, ?, ?, ?)"),
+                    (dbtype, data.get('host') or '', port, data.get('dbname') or '',
+                     data.get('username') or '', '' if pw in ('', '••••••') else pw, data.get('table_prefix') or 'lamkhe_'))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã lưu cấu hình SQL ngoài'})
+
+
+@app.route('/api/integrations/sql/test', methods=['POST'])
+@login_required
+@admin_required
+def api_ext_sql_test():
+    data = request.get_json() or {}
+    conn = get_db()
+    cfg = _get_ext_sql_config(conn)
+    conn.close()
+    for k in ('dbtype', 'host', 'port', 'dbname', 'username', 'table_prefix'):
+        if data.get(k) not in (None, ''):
+            cfg[k] = data[k]
+    if data.get('password') and data.get('password') != '••••••':
+        cfg['password'] = data['password']
+    try:
+        c2 = _ext_sql_connect(cfg)
+        cur2 = c2.cursor()
+        cur2.execute("SELECT version()" if (cfg.get('dbtype') or 'mysql') == 'postgres' else "SELECT VERSION()")
+        ver = cur2.fetchone()
+        c2.close()
+        try:
+            vstr = ver[0] if ver else '?'
+        except Exception:
+            vstr = str(ver)
+        return jsonify({'message': 'Kết nối thành công', 'version': str(vstr)[:200]})
+    except Exception as e:
+        return jsonify({'error': f'Kết nối thất bại: {e}'}), 400
+
+
+@app.route('/api/integrations/sql/sync', methods=['POST'])
+@login_required
+@admin_required
+def api_ext_sql_sync():
+    conn = get_db()
+    cfg = _get_ext_sql_config(conn)
+    if not cfg.get('host') or not cfg.get('dbname'):
+        conn.close()
+        return jsonify({'error': 'Chưa cấu hình SQL ngoài'}), 400
+    prefix = ''.join(ch for ch in (cfg.get('table_prefix') or 'lamkhe_') if ch.isalnum() or ch == '_') or 'lamkhe_'
+    cur = conn.cursor()
+    try:
+        tasks = [dict(r) for r in cur.execute("SELECT id, title, description, status, priority, due_date, max_assignees, points, scope, created_by FROM tasks WHERE deleted_at IS NULL").fetchall()]
+        users = [dict(r) for r in cur.execute("SELECT id, username, role, score FROM users").fetchall()]
+        points = [dict(r) for r in cur.execute("SELECT id, user_id, points, reason, task_id, created_by FROM points_log").fetchall()]
+        fins = [dict(r) for r in cur.execute("SELECT id, type, amount, description, category, date, created_by FROM finance").fetchall()]
+    except Exception as e:
+        conn.close()
+        return jsonify({'error': f'Lỗi đọc dữ liệu nguồn: {e}'}), 500
+    conn.close()
+    try:
+        c2 = _ext_sql_connect(cfg)
+        cur2 = c2.cursor()
+        cur2.execute(f"CREATE TABLE IF NOT EXISTS {prefix}tasks (id INTEGER PRIMARY KEY, title TEXT, description TEXT, status TEXT, priority TEXT, due_date TEXT, max_assignees INTEGER, points INTEGER, scope TEXT, created_by INTEGER)")
+        cur2.execute(f"CREATE TABLE IF NOT EXISTS {prefix}users (id INTEGER PRIMARY KEY, username TEXT, role TEXT, score INTEGER)")
+        cur2.execute(f"CREATE TABLE IF NOT EXISTS {prefix}points_log (id INTEGER PRIMARY KEY, user_id INTEGER, points INTEGER, reason TEXT, task_id INTEGER, created_by INTEGER)")
+        cur2.execute(f"CREATE TABLE IF NOT EXISTS {prefix}finance (id INTEGER PRIMARY KEY, type TEXT, amount REAL, description TEXT, category TEXT, date TEXT, created_by INTEGER)")
+        for tbl, rows, cols in [
+            (f"{prefix}tasks", tasks, ['id', 'title', 'description', 'status', 'priority', 'due_date', 'max_assignees', 'points', 'scope', 'created_by']),
+            (f"{prefix}users", users, ['id', 'username', 'role', 'score']),
+            (f"{prefix}points_log", points, ['id', 'user_id', 'points', 'reason', 'task_id', 'created_by']),
+            (f"{prefix}finance", fins, ['id', 'type', 'amount', 'description', 'category', 'date', 'created_by']),
+        ]:
+            cur2.execute(f"DELETE FROM {tbl}")
+            ph = ','.join(['%s'] * len(cols))
+            for r in rows:
+                cur2.execute(f"INSERT INTO {tbl} ({','.join(cols)}) VALUES ({ph})", tuple(r.get(c) for c in cols))
+        c2.commit()
+        c2.close()
+    except Exception as e:
+        return jsonify({'error': f'Đồng bộ thất bại: {e}'}), 500
+    return jsonify({'message': f"Đã đồng bộ: {len(tasks)} tasks, {len(users)} users, {len(points)} điểm, {len(fins)} giao dịch"})
 
 
 @app.route('/api/tasks/import', methods=['POST'])
@@ -1377,10 +1641,19 @@ def api_update_task(task_id):
          due_date, max_assignees, points, est, data.get('skills', t.get('skills', '') or ''),
          data.get('scope', t.get('scope', 'lang') or 'lang') if (data.get('scope', t.get('scope', 'lang') or 'lang')) in ('lang', 'xa') else 'lang', task_id))
 
+    prev_rows = cur.execute(q("SELECT user_id FROM task_assignments WHERE task_id = %s",
+                              "SELECT user_id FROM task_assignments WHERE task_id = ?"), (task_id,)).fetchall()
+    prev_ids = set(dict(r)['user_id'] for r in prev_rows)
     cur.execute(q("DELETE FROM task_assignments WHERE task_id = %s", "DELETE FROM task_assignments WHERE task_id = ?"), (task_id,))
     for uid in assigned_ids:
         cur.execute(q("INSERT INTO task_assignments (task_id, user_id) VALUES (%s, %s)",
                       "INSERT INTO task_assignments (task_id, user_id) VALUES (?, ?)"), (task_id, uid))
+    new_title = data.get('title', t['title'])
+    new_ids = [uid for uid in assigned_ids if uid not in prev_ids and uid != session['user_id']]
+    for uid in new_ids:
+        _notify_user(conn, uid, 'assign', f"Bạn được giao việc: {new_title}", f"#{task_id}", '')
+    if new_ids:
+        _push_assignment_chat(conn, task_id, new_title, new_ids, session['user_id'])
 
     if 'depends_on' in data:
         cur.execute(q("DELETE FROM task_dependencies WHERE task_id = %s", "DELETE FROM task_dependencies WHERE task_id = ?"), (task_id,))
@@ -1858,6 +2131,11 @@ def api_claim_task(task_id):
     if task['status'] == 'pending':
         cur.execute(q("UPDATE tasks SET status = 'in_progress' WHERE id = %s",
                       "UPDATE tasks SET status = 'in_progress' WHERE id = ?"), (task_id,))
+
+    creator = task['created_by']
+    if creator and creator != session['user_id']:
+        claimer = session.get('username') or 'Đoàn viên'
+        _notify_user(conn, creator, 'claim', f"{claimer} đã nhận task: {task['title']}", f"#{task_id}", '')
 
     conn.commit()
     updated = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
