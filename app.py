@@ -1328,7 +1328,8 @@ def api_serve_file(task_id, filename):
             orig = row['filename'] or safe
         except Exception:
             orig = safe
-        disp = f'inline; filename="{safe}"; filename*=UTF-8\'\'{_quote(orig)}'
+        ascii_name = (safe.encode('ascii', 'ignore').decode('ascii').strip() or 'file').replace('"', '')
+        disp = f'inline; filename="{ascii_name}"; filename*=UTF-8\'\'{_quote(orig)}'
         return Response(blob, mimetype=mime, headers={'Content-Disposition': disp})
     # 2) Disk fallback (older uploads still on disk)
     file_path = _os.path.join(uploads_dir, safe)
