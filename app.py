@@ -746,6 +746,14 @@ def auth_google():
 
 @app.route('/auth/google/callback')
 def auth_google_callback():
+    try:
+        return _auth_google_callback_impl()
+    except Exception:
+        logging.getLogger('taskmanager').exception('Google callback failed')
+        return redirect(url_for('login_page') + '?gerr=failed')
+
+
+def _auth_google_callback_impl():
     err = request.args.get('error')
     if err:
         return redirect(url_for('login_page') + '?gerr=' + (err if err in ('access_denied', 'account_selection_required') else 'failed'))
@@ -819,15 +827,19 @@ def auth_google_callback():
             username = f'{base}{n}'
         pw = hash_password(secrets.token_urlsafe(12))
         cur.execute(q("INSERT INTO users (username, password, role, email, full_name, avatar, google_id) "
-                      "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                      "VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
                       "INSERT INTO users (username, password, role, email, full_name, avatar, google_id) "
                       "VALUES (?, ?, ?, ?, ?, ?, ?)"),
                     (username, pw, 'user', email, full_name, picture, google_sub))
+        if is_pg():
+            row_new = cur.fetchone()
+            user_id = dict(row_new)['id'] if row_new else None
+        else:
+            user_id = cur.lastrowid
         conn.commit()
-        user_id = cur.lastrowid
         if not user_id:
             row = cur.execute(q("SELECT id FROM users WHERE google_id = %s",
-                                "SELECT * FROM users WHERE google_id = ?"), (google_sub,)).fetchone()
+                                "SELECT id FROM users WHERE google_id = ?"), (google_sub,)).fetchone()
             user_id = dict(row)['id']
         username, role = username, 'user'
 
