@@ -28,7 +28,7 @@ async function loadUser() {
         if (!res.ok) { window.location.href = '/login'; return; }
         currentUser = await res.json();
         document.getElementById('userName').textContent = currentUser.full_name || currentUser.username;
-document.getElementById('userAvatar').innerHTML = currentUser.avatar ? `<img src="${currentUser.avatar}" alt="Avatar" class="avatar-img" onerror="this.parentElement.innerHTML='${(currentUser.full_name || currentUser.username)[0].toUpperCase()}'">` : (currentUser.full_name || currentUser.username)[0].toUpperCase();
+        renderAvatar();
         const roleEl = document.getElementById('userRole');
         roleEl.textContent = currentUser.role === 'bithu' ? t('role_bithu') : t('role_user');
         if (currentUser.role === 'bithu') roleEl.classList.add('badge-admin');
@@ -50,6 +50,25 @@ document.getElementById('userAvatar').innerHTML = currentUser.avatar ? `<img src
             if (target && currentUser.default_view !== 'kanban') target.click();
         }
     } catch (err) { window.location.href = '/login'; }
+}
+
+function renderAvatar() {
+    const box = document.getElementById('userAvatar');
+    if (!box || !currentUser) return;
+    const name = currentUser.full_name || currentUser.username || '?';
+    const initial = name.charAt(0).toUpperCase();
+    const url = (currentUser.avatar || '').trim();
+    box.textContent = '';
+    if (url && /^(https?:\/\/(?!\/)|\/(?!\/))/i.test(url)) {
+        const img = document.createElement('img');
+        img.className = 'avatar-img';
+        img.alt = 'Avatar';
+        img.onerror = () => { box.textContent = initial; };
+        img.src = url;
+        box.appendChild(img);
+    } else {
+        box.textContent = initial;
+    }
 }
 
 // ==================== THEME ====================
@@ -230,7 +249,7 @@ function createTaskCard(task) {
 
     let adminActions = '';
     if (isAdmin) {
-        adminActions = `<button class="btn-icon" onclick="openEditModal(${task.id})" title="Sửa">&#9998;</button><button class="btn-icon" onclick="openDeleteModal(${task.id}, '${escapeHtml(task.title)}')" title="Xóa">&#10005;</button>`;
+        adminActions = `<button class="btn-icon" onclick="openEditModal(${task.id})" title="Sửa">&#9998;</button><button class="btn-icon" onclick="openDeleteModal(${task.id})" title="Xóa">&#10005;</button>`;
     }
 
     const assigneeTags = task.assigned_users.map(u => `<span class="assignee-tag">@${escapeHtml(u.username)}</span>`).join('');
@@ -280,7 +299,7 @@ function renderList(tasks) {
         const isClaimed = task.is_claimed_by_me;
         const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
         const canClaim = !isClaimed && task.slots_left > 0 && task.status !== 'done';
-        let adminActions = isAdmin ? `<button class="btn-icon" onclick="openEditModal(${task.id})">&#9998;</button><button class="btn-icon" onclick="openDeleteModal(${task.id}, '${escapeHtml(task.title)}')">&#10005;</button>` : '';
+        let adminActions = isAdmin ? `<button class="btn-icon" onclick="openEditModal(${task.id})">&#9998;</button><button class="btn-icon" onclick="openDeleteModal(${task.id})">&#10005;</button>` : '';
         const assigneeNames = task.assigned_users.map(u => escapeHtml(u.username)).join(', ');
         let statusCell = (isClaimed || isAdmin) ? `<select class="status-select" onchange="changeStatus(${task.id}, this.value)"><option value="pending" ${task.status === 'pending' ? 'selected' : ''}>${getStatusLabel('pending')}</option><option value="in_progress" ${task.status === 'in_progress' ? 'selected' : ''}>${getStatusLabel('in_progress')}</option><option value="done" ${task.status === 'done' ? 'selected' : ''}>${getStatusLabel('done')}</option></select>` : `<span class="status-label">${getStatusLabel(task.status)}</span>`;
         let claimBtn = canClaim ? `<button class="btn btn-claim btn-sm" onclick="claimTask(${task.id})">${t('claim_sm')}</button>` : isClaimed ? `<button class="btn btn-unclaim btn-sm" onclick="unclaimTask(${task.id})">${t('unclaim')}</button>` : '';
@@ -300,10 +319,12 @@ async function loadPoints() {
 function renderPoints() {
     const tbody = document.getElementById('pointsTableBody');
     if (!allPoints.length) { tbody.innerHTML = `<tr><td colspan="5" class="empty-state"><p>${t('no_data')}</p></td></tr>`; return; }
-    tbody.innerHTML = allPoints.map((u, i) => `<tr><td>${i + 1}</td><td><strong>${escapeHtml(u.username)}</strong></td><td><span class="priority-tag ${u.role === 'bithu' ? 'high' : 'low'}">${u.role === 'bithu' ? t('role_bithu') : t('role_user')}</span></td><td><span class="priority-tag low" style="font-size:14px;">${u.score}</span></td><td><button class="btn btn-sm btn-secondary" onclick="openPointsDetail(${u.id}, '${escapeHtml(u.username)}')">${curLang() === 'en' ? 'View detail' : 'Xem chi tiết'}</button></td></tr>`).join('');
+    tbody.innerHTML = allPoints.map((u, i) => `<tr><td>${i + 1}</td><td><strong>${escapeHtml(u.username)}</strong></td><td><span class="priority-tag ${u.role === 'bithu' ? 'high' : 'low'}">${u.role === 'bithu' ? t('role_bithu') : t('role_user')}</span></td><td><span class="priority-tag low" style="font-size:14px;">${u.score}</span></td><td><button class="btn btn-sm btn-secondary" onclick="openPointsDetail(${u.id})">${curLang() === 'en' ? 'View detail' : 'Xem chi tiết'}</button></td></tr>`).join('');
 }
 
-async function openPointsDetail(userId, username) {
+async function openPointsDetail(userId) {
+    const found = allPoints.find(u => u.id === userId) || allUsers.find(u => u.id === userId);
+    const username = found ? found.username : '';
     try {
         const res = await fetch(`/api/points/${userId}`);
         const data = await res.json();
@@ -508,7 +529,12 @@ function getSelectedDeps() {
 
 function closeTaskModal() { document.getElementById('taskModal').classList.remove('active'); }
 function openEditModal(taskId) { openTaskModal(taskId); }
-function openDeleteModal(taskId, title) { deleteTaskId = taskId; document.getElementById('deleteTaskName').textContent = title; document.getElementById('deleteModal').classList.add('active'); }
+function openDeleteModal(taskId) {
+    const task = allTasks.find(x => x.id === taskId);
+    deleteTaskId = taskId;
+    document.getElementById('deleteTaskName').textContent = task ? task.title : '';
+    document.getElementById('deleteModal').classList.add('active');
+}
 function closeDeleteModal() { document.getElementById('deleteModal').classList.remove('active'); deleteTaskId = null; }
 
 function openImportModal() {
@@ -618,7 +644,7 @@ async function loadUsersList() {
                 <td><div style="display:flex;gap:4px;"><input type="text" value="${escapeHtml(u.title || '')}" id="title-${u.id}" placeholder="${t('th_title_col')}" style="width:120px;"><button class="btn btn-sm btn-secondary" onclick="updateUserTitle(${u.id})">${t('save')}</button></div></td>
                 <td><select class="status-select" onchange="updateUserRole(${u.id}, this.value)">${roleOptions}</select></td>
                 <td>${u.score || 0}</td>
-                <td><button class="btn-icon" onclick="delUser(${u.id}, '${escapeHtml(u.username)}')" title="Xóa">&#10005;</button></td>            </tr>`;
+                <td><button class="btn-icon" onclick="delUser(${u.id})" title="Xóa">&#10005;</button></td>            </tr>`;
         }).join('');
     } catch (err) { showToast('Lỗi tải danh sách user', 'error'); }
 }
@@ -651,7 +677,9 @@ async function updateUserRole(userId, newRole) {
     } catch (err) { showToast('Lỗi kết nối', 'error'); }
 }
 
-async function delUser(userId, username) {
+async function delUser(userId) {
+    const found = allUsers.find(u => u.id === userId);
+    const username = found ? found.username : '';
     if (!confirm(`${t('del_user_q')} "${username}"?`)) return;
     try {
         const res = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
@@ -672,10 +700,10 @@ function showToast(message, type = 'info') {
 }
 
 function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    if (text === null || text === undefined) return '';
+    return String(text).replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
 }
 
 // ==================== I18N ====================
@@ -895,7 +923,7 @@ function fillSettings() {
     const set2 = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
     set2('intSlack', currentUser.slack_url); set2('intTeams', currentUser.teams_url);
     set2('intGithub', currentUser.github_repo); set2('setSkills', currentUser.skills);
-    if (currentUser.avatar) document.getElementById('userAvatar').innerHTML = `<img src="${currentUser.avatar}" alt="Avatar" class="avatar-img" onerror="this.parentElement.innerHTML='${(currentUser.full_name || currentUser.username)[0].toUpperCase()}'">`; else document.getElementById('userAvatar').textContent = (currentUser.full_name || currentUser.username)[0].toUpperCase();
+    renderAvatar();
     localStorage.setItem('date_format', currentUser.date_format || 'DD/MM/YYYY');
     localStorage.setItem('time_format', currentUser.time_format || '24h');
     if (!localStorage.getItem('theme') && currentUser.theme) {
@@ -1418,11 +1446,11 @@ async function loadAttaches() {
         const isPdf = url.toLowerCase().endsWith('.pdf') || url.includes('/file/');
         if (isPdf && url) {
             return `<div style="margin-bottom:8px;">
-                <div style="font-size:13px;">📎 <a href="${escapeHtml(url)}" target="_blank" style="color:var(--accent);">${escapeHtml(a.filename || 'Xem file')}</a></div>
+                <div style="font-size:13px;">📎 <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);">${escapeHtml(a.filename || 'Xem file')}</a></div>
                 <embed src="${escapeHtml(url)}" type="application/pdf" style="width:100%;height:400px;border:1px solid var(--border);border-radius:8px;margin-top:4px;">
             </div>`;
         }
-        return `<div style="font-size:13px;margin-bottom:4px;">📎 <a href="${escapeHtml(url || '#')}" target="_blank" style="color:var(--accent);">${escapeHtml(a.filename || url || '')}</a> <small style="color:var(--text-muted);">${escapeHtml(a.note || '')}</small></div>`;
+        return `<div style="font-size:13px;margin-bottom:4px;">📎 <a href="${escapeHtml(url || '#')}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);">${escapeHtml(a.filename || url || '')}</a> <small style="color:var(--text-muted);">${escapeHtml(a.note || '')}</small></div>`;
     }).join('');
 }
 async function addAttach() {

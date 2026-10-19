@@ -6,3 +6,8 @@ database.db
 venv/
 .env.local
 uploads/
+zalo_config.json
+zalo_token.json
+zalo_schedule.db
+instance/
+.pytest_cache/

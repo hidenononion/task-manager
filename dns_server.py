@@ -1,9 +1,12 @@
+import os
 import socket
 import struct
 import threading
 import sys
 
-DNS_HOST = '0.0.0.0'
+# Mac dinh chi nghe loopback de khong thanh open resolver (DNS amplification).
+# Neu can chia se cho thiet bi trong LAN: dat DNS_BIND=0.0.0.0 (chi trong LAN tin cay).
+DNS_HOST = os.environ.get('DNS_BIND', '127.0.0.1')
 DNS_PORT = 53
 UPSTREAM_DNS = '8.8.8.8'
 UPSTREAM_PORT = 53

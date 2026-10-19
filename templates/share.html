@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="robots" content="noindex,nofollow">
+    <title>Tiến độ - Đoàn TN thôn Lam Khê</title>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #0a0a0f; color: #eee; margin: 0; padding: 24px; }
+        table { width: 100%; border-collapse: collapse; }
+        td, th { border: 1px solid #333; padding: 8px; text-align: left; }
+        th { background: #1a1a24; }
+        .note { color: #888; }
+        .status { white-space: nowrap; }
+    </style>
+</head>
+<body>
+    <h2>Tiến độ công việc - Đoàn TN thôn Lam Khê</h2>
+    {% if mode == 'comment' %}
+    <p class="note">Link này cho phép bình luận (liên hệ Bí thư để gửi nhận xét).</p>
+    {% endif %}
+    <table>
+        <thead>
+            <tr><th>Nhiệm vụ</th><th>Trạng thái</th><th>Hạn</th></tr>
+        </thead>
+        <tbody>
+            {% for task in tasks %}
+            <tr>
+                <td>{{ task.title }}</td>
+                <td class="status">
+                    {% if task.status == 'done' %}Hoàn thành
+                    {% elif task.status == 'in_progress' %}Đang thực hiện
+                    {% else %}Chờ xử lý{% endif %}
+                </td>
+                <td>{{ task.due_date or '' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3">Chưa có nhiệm vụ.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>
