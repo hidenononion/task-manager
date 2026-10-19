@@ -1,6 +1,7 @@
 import os
 import csv
 import hashlib
+import hmac
 import io
 import secrets
 from datetime import datetime
@@ -9,6 +10,7 @@ from functools import wraps
 from flask import (  # pyright: ignore[reportMissingImports]
     Flask, request, jsonify, session, render_template, redirect, url_for, Response
 )
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dtnlamkhe-secret-change-in-production')
@@ -503,7 +505,25 @@ def init_db():
 
 
 def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+    try:
+        return generate_password_hash(password)
+    except (ValueError, RuntimeError):
+        return generate_password_hash(password, method='pbkdf2:sha256:600000')
+
+
+def _looks_like_legacy_hash(stored):
+    return bool(stored) and len(stored) == 64 and all(c in '0123456789abcdefABCDEF' for c in stored)
+
+
+def verify_password(stored, password):
+    if not stored or password is None:
+        return False
+    if _looks_like_legacy_hash(stored):
+        return hmac.compare_digest(stored.lower(), hashlib.sha256(password.encode()).hexdigest())
+    try:
+        return check_password_hash(stored, password)
+    except (ValueError, TypeError):
+        return False
 
 
 def login_required(f):
@@ -706,15 +726,23 @@ def api_login():
 
     conn = get_db()
     cur = conn.cursor()
-    user = cur.execute(q("SELECT * FROM users WHERE username = %s AND password = %s",
-                         "SELECT * FROM users WHERE username = ? AND password = ?"),
-                       (username, hash_password(password))).fetchone()
+    user = cur.execute(q("SELECT * FROM users WHERE username = %s",
+                         "SELECT * FROM users WHERE username = ?"),
+                       (username,)).fetchone()
 
-    if not user:
+    if not user or not verify_password(dict(user).get('password'), password):
         conn.close()
         return jsonify({'error': 'Sai username hoặc password'}), 401
 
     u = dict(user)
+    if _looks_like_legacy_hash(u.get('password') or ''):
+        try:
+            cur.execute(q("UPDATE users SET password = %s WHERE id = %s",
+                          "UPDATE users SET password = ? WHERE id = ?"),
+                        (hash_password(password), u['id']))
+            conn.commit()
+        except Exception:
+            pass
     session['user_id'] = u['id']
     session['username'] = u['username']
     session['role'] = u['role']
@@ -898,7 +926,7 @@ def api_change_password():
     cur = conn.cursor()
     user = cur.execute(q("SELECT * FROM users WHERE id = %s", "SELECT * FROM users WHERE id = ?"),
                        (session['user_id'],)).fetchone()
-    if not user or dict(user)['password'] != hash_password(old):
+    if not user or not verify_password(dict(user).get('password'), old):
         conn.close()
         return jsonify({'error': 'Mật khẩu cũ không đúng'}), 400
     cur.execute(q("UPDATE users SET password = %s WHERE id = %s", "UPDATE users SET password = ? WHERE id = ?"),
