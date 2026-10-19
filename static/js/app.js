@@ -713,6 +713,8 @@ vi: {
     save_int: 'Lưu tích hợp', api_wh: 'API & Webhook', api_token: 'API Token', regen: 'Tạo mới', add_wh: '+ Thêm webhook',
     data_io: 'Nhập / Xuất dữ liệu', export_tasks: 'Xuất tasks CSV', export_fin: 'Xuất tài chính CSV',
     import_lbl: 'Dán CSV để nhập tasks (cột: title,description,status,priority,due_date,points)', import_btn: 'Nhập tasks',
+    backup_h: 'Sao lưu / Khôi phục toàn bộ', backup_desc: 'Tải toàn bộ dữ liệu ra file JSON để sao lưu. Khi có DB mới, chọn file này để khôi phục.',
+    backup_dl: 'Tải backup JSON', backup_restore: 'Khôi phục từ backup',
     trash_h: 'Thùng rác (giữ 30 ngày)', trash_empty: 'Thùng rác trống', restore: 'Khôi phục', purge: 'Xóa vĩnh viễn',
     storage_h: 'Dung lượng', danger_h: 'Vùng nguy hiểm',
     danger_desc: 'Reset xóa toàn bộ task, điểm, tài chính, quỹ về 0 — chỉ giữ lại tài khoản Bí thư.',
@@ -775,6 +777,8 @@ en: {
     save_int: 'Save integrations', api_wh: 'API & Webhook', api_token: 'API Token', regen: 'Regenerate', add_wh: '+ Add webhook',
     data_io: 'Import / Export', export_tasks: 'Export tasks CSV', export_fin: 'Export finance CSV',
     import_lbl: 'Paste CSV to import tasks (columns: title,description,status,priority,due_date,points)', import_btn: 'Import tasks',
+    backup_h: 'Full backup / restore', backup_desc: 'Download all data as a JSON file to keep a backup. Restore it into a new database anytime.',
+    backup_dl: 'Download backup JSON', backup_restore: 'Restore from backup',
     trash_h: 'Trash (kept 30 days)', trash_empty: 'Trash is empty', restore: 'Restore', purge: 'Delete forever',
     storage_h: 'Storage', danger_h: 'Danger zone',
     danger_desc: 'Reset deletes all tasks, points, finance and zeroes the fund — Secretary accounts are kept.',
@@ -1188,6 +1192,22 @@ async function addWebhook() {
 }
 async function delWebhook(id) { await fetch(`/api/webhooks/${id}`, { method: 'DELETE' }); loadWebhooks(); }
 function exportCSV(kind) { window.location.href = `/api/export/${kind}`; }
+function downloadBackup() { window.location.href = '/api/backup/full'; }
+async function restoreBackup() {
+    const el = document.getElementById('restoreFile');
+    const out = document.getElementById('backupResult');
+    if (!el || !el.files || !el.files[0]) { if (out) out.textContent = 'Chọn file backup JSON trước đã'; return; }
+    if (!confirm('Khôi phục sẽ chèn thêm dữ liệu từ file backup. Tiếp tục?')) return;
+    if (out) out.textContent = 'Đang khôi phục...';
+    try {
+        const text = await el.files[0].text();
+        const res = await fetch('/api/restore/full', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: text });
+        const data = await res.json();
+        if (out) out.textContent = res.ok ? (data.message + ' ' + JSON.stringify(data.counts || {})) : (data.error || 'Lỗi');
+        showToast(res.ok ? data.message : (data.error || 'Lỗi'), res.ok ? 'success' : 'error');
+        if (res.ok) { loadTasks(); loadUsers(); }
+    } catch (e) { if (out) out.textContent = 'Lỗi đọc file backup'; }
+}
 async function importCsvTasks() {
     const res = await fetch('/api/import/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ csv: document.getElementById('importCsv').value }) });

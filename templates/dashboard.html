@@ -489,6 +489,15 @@
                 </div>
                 <button class="btn btn-primary" onclick="importCsvTasks()" data-i18n="import_btn">Nhập tasks</button>
                 <hr style="margin:20px 0;border-color:var(--border);">
+                <h3 data-i18n="backup_h">Sao lưu / Khôi phục toàn bộ</h3>
+                <p style="color:var(--text-secondary);font-size:13px;" data-i18n="backup_desc">Tải toàn bộ dữ liệu (người dùng, task, file đính kèm, điểm, tài chính) ra file JSON để sao lưu. Khi có DB mới, chọn file này để khôi phục.</p>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <button class="btn btn-secondary" onclick="downloadBackup()" data-i18n="backup_dl">Tải backup JSON</button>
+                    <input type="file" id="restoreFile" accept="application/json,.json" style="font-size:13px;">
+                    <button class="btn btn-primary" onclick="restoreBackup()" data-i18n="backup_restore">Khôi phục từ backup</button>
+                </div>
+                <div id="backupResult" style="margin-top:8px;font-size:13px;"></div>
+                <hr style="margin:20px 0;border-color:var(--border);">
                 <h3 data-i18n="trash_h">Thùng rác (giữ 30 ngày)</h3>
                 <table class="task-table">
                     <thead><tr><th data-i18n="th_task">Task</th><th data-i18n="th_deleted">Xóa lúc</th><th></th></tr></thead>

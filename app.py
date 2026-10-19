@@ -1,5 +1,7 @@
 import os
+import base64
 import csv
+import json
 import hashlib
 import hmac
 import io
@@ -1055,6 +1057,87 @@ def api_webhook_delete(wid):
     conn.commit()
     conn.close()
     return jsonify({'message': 'Đã xóa webhook'})
+
+
+BACKUP_TABLES = [
+    'users', 'tasks', 'task_assignments', 'points_log', 'finance', 'fund',
+    'login_history', 'automation_rules', 'webhooks', 'attachments', 'subtasks',
+    'task_dependencies', 'comments', 'time_logs', 'shares', 'notifications',
+]
+
+
+@app.route('/api/backup/full')
+@login_required
+@admin_required
+def api_backup_full():
+    conn = get_db()
+    cur = conn.cursor()
+    data = {}
+    for tbl in BACKUP_TABLES:
+        try:
+            rows = cur.execute(f'SELECT * FROM {tbl}').fetchall()
+        except Exception:
+            continue
+        out = []
+        for r in rows:
+            d = dict(r)
+            for k, v in list(d.items()):
+                if isinstance(v, (bytes, bytearray, memoryview)):
+                    d[k] = {'__b64__': base64.b64encode(bytes(v)).decode('ascii')}
+            out.append(d)
+        data[tbl] = out
+    conn.close()
+    stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+    return Response(json.dumps(data, ensure_ascii=False, indent=1, default=str),
+                    mimetype='application/json',
+                    headers={'Content-Disposition':
+                             f'attachment; filename="lamkhe-backup-{stamp}.json"'})
+
+
+@app.route('/api/restore/full', methods=['POST'])
+@login_required
+@admin_required
+def api_restore_full():
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict) or not data:
+        return jsonify({'error': 'File backup không hợp lệ'}), 400
+    conn = get_db()
+    cur = conn.cursor()
+    counts = {}
+    for tbl in BACKUP_TABLES:
+        rows = data.get(tbl)
+        if not isinstance(rows, list) or not rows:
+            continue
+        try:
+            cols = [d[0] for d in cur.execute(f'SELECT * FROM {tbl} LIMIT 0').description]
+        except Exception:
+            continue
+        n = 0
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            use = {k: v for k, v in row.items() if k in cols}
+            for k, v in list(use.items()):
+                if isinstance(v, dict) and '__b64__' in v:
+                    try:
+                        use[k] = base64.b64decode(v['__b64__'])
+                    except Exception:
+                        use.pop(k, None)
+            keys = list(use.keys())
+            if not keys:
+                continue
+            ph = ','.join(['%s'] * len(keys)) if is_pg() else ','.join(['?'] * len(keys))
+            try:
+                cur.execute(f"INSERT INTO {tbl} ({','.join(keys)}) VALUES ({ph})",
+                            [use[k] for k in keys])
+                n += 1
+            except Exception:
+                pass
+        if n:
+            counts[tbl] = n
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã khôi phục dữ liệu', 'counts': counts})
 
 
 @app.route('/api/export/<kind>')
