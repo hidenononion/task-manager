@@ -14,6 +14,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (registerForm) registerForm.addEventListener('submit', handleRegister);
     if (window.location.hash === '#signup') flipCard();
 
+    const gerr = new URLSearchParams(window.location.search).get('gerr');
+    if (gerr) {
+        const msgs = {
+            not_configured: 'Đăng nhập Google chưa được cấu hình trên máy chủ.',
+            access_denied: 'Bạn đã hủy đăng nhập Google.',
+            state: 'Phiên đăng nhập không hợp lệ, hãy thử lại.',
+            failed: 'Đăng nhập Google thất bại, vui lòng thử lại.'
+        };
+        const el = document.getElementById('loginError');
+        if (el) el.textContent = msgs[gerr] || msgs.failed;
+    }
+
     fetch('/api/me').then(r => { if (r.ok) window.location.href = '/dashboard'; }).catch(() => {});
 });
 

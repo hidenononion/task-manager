@@ -703,6 +703,8 @@ vi: {
     profile_h: 'Thông tin cá nhân', lbl_name: 'Họ tên', lbl_dept: 'Phòng ban', lbl_phone: 'Số điện thoại', lbl_email: 'Email liên hệ',
     lbl_avatar: 'Avatar (URL)', lbl_title_ro: 'Chức danh (chỉ Bí thư đổi)', save_profile: 'Lưu hồ sơ',
     sec_pass: 'Đổi mật khẩu', old_pass: 'Mật khẩu cũ', new_pass: 'Mật khẩu mới', change_pass_btn: 'Đổi mật khẩu',
+    google_h: 'Đăng nhập bằng Google', google_desc: 'Liên kết tài khoản Google để đăng nhập nhanh bằng 1 cú chạm.',
+    google_link: 'Liên kết Google', google_unlink: 'Gỡ liên kết',
     login_hist: 'Lịch sử đăng nhập / Thiết bị',
     disp_h: 'Chế độ hiển thị', lbl_theme: 'Theme', theme_dark: 'Tối', theme_light: 'Sáng', theme_sys: 'Theo hệ thống',
     lbl_default_view: 'Giao diện công việc mặc định', lbl_lang: 'Ngôn ngữ', lbl_tz: 'Múi giờ',
@@ -767,6 +769,8 @@ en: {
     profile_h: 'Personal info', lbl_name: 'Full name', lbl_dept: 'Department', lbl_phone: 'Phone', lbl_email: 'Contact email',
     lbl_avatar: 'Avatar (URL)', lbl_title_ro: 'Title (Secretary only)', save_profile: 'Save profile',
     sec_pass: 'Change password', old_pass: 'Old password', new_pass: 'New password', change_pass_btn: 'Change password',
+    google_h: 'Google sign-in', google_desc: 'Link your Google account for one-tap login.',
+    google_link: 'Link Google', google_unlink: 'Unlink',
     login_hist: 'Login history / Devices',
     disp_h: 'Display mode', lbl_theme: 'Theme', theme_dark: 'Dark', theme_light: 'Light', theme_sys: 'System',
     lbl_default_view: 'Default task view', lbl_lang: 'Language', lbl_tz: 'Timezone',
@@ -881,6 +885,7 @@ function switchSettingsTab(tab) {
 
 function fillSettings() {
     if (!currentUser) return;
+    updateGoogleLink();
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
     set('setFullName', currentUser.full_name);
     set('setDept', currentUser.department); set('setPhone', currentUser.phone);
@@ -913,6 +918,26 @@ async function loadSettings() {
     fillSettings();
     loadLoginHistory(); loadRules(); loadWebhooks(); loadTrash(); loadStorage(); loadSqlConfig();
     if (currentUser && currentUser.role === 'bithu') { loadRules(); loadWebhooks(); loadTrash(); }
+}
+
+function updateGoogleLink() {
+    const linked = !!(currentUser && currentUser.google_id);
+    const btn = document.getElementById('googleLinkBtn');
+    const un = document.getElementById('googleUnlinkBtn');
+    const info = document.getElementById('googleLinkInfo');
+    if (btn) btn.style.display = linked ? 'none' : '';
+    if (un) un.style.display = linked ? '' : 'none';
+    if (info) info.textContent = linked ? (curLang() === 'en' ? 'This account is linked with Google.' : 'Tài khoản đã được liên kết với Google.') : (curLang() === 'en' ? 'Link your Google account for one-tap login.' : 'Liên kết tài khoản Google để đăng nhập nhanh bằng 1 cú chạm.');
+}
+
+async function unlinkGoogle() {
+    if (!confirm(curLang() === 'en' ? 'Unlink Google account?' : 'Gỡ liên kết Google?')) return;
+    try {
+        const res = await fetch('/api/profile/google-unlink', { method: 'POST' });
+        const data = await res.json();
+        showToast(data.message || data.error || 'OK', res.ok ? 'success' : 'error');
+        if (res.ok) { await loadUser(); updateGoogleLink(); }
+    } catch (e) { showToast('Lỗi kết nối', 'error'); }
 }
 
 async function saveProfile() {

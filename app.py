@@ -9,6 +9,7 @@ import logging
 import secrets
 from datetime import datetime
 from functools import wraps
+from urllib.parse import urlencode
 
 from flask import (  # pyright: ignore[reportMissingImports]
     Flask, request, jsonify, session, render_template, redirect, url_for, Response
@@ -480,7 +481,8 @@ def _init_db_body(conn):
         except Exception:
             pass
     for col, typ in [('slack_url', "TEXT DEFAULT ''"), ('teams_url', "TEXT DEFAULT ''"),
-                     ('github_repo', "TEXT DEFAULT ''"), ('skills', "TEXT DEFAULT ''")]:
+                     ('github_repo', "TEXT DEFAULT ''"), ('skills', "TEXT DEFAULT ''"),
+                     ('google_id', "TEXT DEFAULT ''")]:
         try:
             ensure_column(cur, 'users', col, typ)
         except Exception:
@@ -683,7 +685,161 @@ def index():
 
 @app.route('/login')
 def login_page():
-    return render_template('login.html')
+    return render_template('login.html', google_enabled=google_configured())
+
+
+# ==================== GOOGLE LOGIN (OAuth 2.0 / OIDC) ====================
+
+GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
+GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
+GOOGLE_USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo'
+
+
+def google_configured():
+    return bool((os.environ.get('GOOGLE_CLIENT_ID') or '').strip()
+                and (os.environ.get('GOOGLE_CLIENT_SECRET') or '').strip())
+
+
+def _google_redirect_uri():
+    return (os.environ.get('GOOGLE_REDIRECT_URI')
+            or url_for('auth_google_callback', _external=True))
+
+
+@app.route('/auth/google')
+def auth_google():
+    if not google_configured():
+        return redirect(url_for('login_page') + '?gerr=not_configured')
+    state = secrets.token_urlsafe(20)
+    session['google_state'] = state
+    session['google_next'] = request.args.get('next') or '/dashboard'
+    session['google_link'] = '1' if request.args.get('link') == '1' and session.get('user_id') else '0'
+    params = {
+        'client_id': os.environ['GOOGLE_CLIENT_ID'],
+        'redirect_uri': _google_redirect_uri(),
+        'response_type': 'code',
+        'scope': 'openid email profile',
+        'state': state,
+        'access_type': 'online',
+        'prompt': 'select_account',
+    }
+    return redirect(GOOGLE_AUTH_URL + '?' + urlencode(params))
+
+
+@app.route('/auth/google/callback')
+def auth_google_callback():
+    err = request.args.get('error')
+    if err:
+        return redirect(url_for('login_page') + '?gerr=' + (err if err in ('access_denied', 'account_selection_required') else 'failed'))
+    expected = session.pop('google_state', None)
+    if not expected or expected != request.args.get('state'):
+        return redirect(url_for('login_page') + '?gerr=state')
+    code = request.args.get('code')
+    if not code:
+        return redirect(url_for('login_page') + '?gerr=failed')
+
+    try:
+        import requests
+        tok_resp = requests.post(GOOGLE_TOKEN_URL, data={
+            'code': code,
+            'client_id': os.environ['GOOGLE_CLIENT_ID'],
+            'client_secret': os.environ['GOOGLE_CLIENT_SECRET'],
+            'redirect_uri': _google_redirect_uri(),
+            'grant_type': 'authorization_code',
+        }, timeout=20)
+        token = tok_resp.json().get('access_token')
+        if not token:
+            raise ValueError('no access_token')
+        info = requests.get(GOOGLE_USERINFO_URL,
+                            headers={'Authorization': 'Bearer ' + token},
+                            timeout=20).json()
+    except Exception:
+        return redirect(url_for('login_page') + '?gerr=failed')
+
+    google_sub = info.get('sub') or ''
+    email = (info.get('email') or '').strip().lower()
+    verified = info.get('email_verified')
+    full_name = (info.get('name') or '').strip()
+    picture = (info.get('picture') or '').strip()
+    if not google_sub or not email:
+        return redirect(url_for('login_page') + '?gerr=failed')
+
+    conn = get_db()
+    cur = conn.cursor()
+    link_mode = session.pop('google_link', '0') == '1'
+    user = None
+    if link_mode and session.get('user_id'):
+        user = cur.execute(q("SELECT * FROM users WHERE id = %s",
+                             "SELECT * FROM users WHERE id = ?"), (session['user_id'],)).fetchone()
+    if user is None:
+        user = cur.execute(q("SELECT * FROM users WHERE google_id = %s",
+                             "SELECT * FROM users WHERE google_id = ?"), (google_sub,)).fetchone()
+    if user is None and email and verified is not False:
+        user = cur.execute(q("SELECT * FROM users WHERE lower(email) = %s",
+                             "SELECT * FROM users WHERE lower(email) = ?"), (email,)).fetchone()
+
+    if user is not None:
+        u = dict(user)
+        if not (u.get('google_id') or ''):
+            cur.execute(q("UPDATE users SET google_id = %s WHERE id = %s",
+                          "UPDATE users SET google_id = ? WHERE id = ?"), (google_sub, u['id']))
+        if picture and not (u.get('avatar') or ''):
+            cur.execute(q("UPDATE users SET avatar = %s WHERE id = %s",
+                          "UPDATE users SET avatar = ? WHERE id = ?"), (picture, u['id']))
+        if full_name and not (u.get('full_name') or ''):
+            cur.execute(q("UPDATE users SET full_name = %s WHERE id = %s",
+                          "UPDATE users SET full_name = ? WHERE id = ?"), (full_name, u['id']))
+        conn.commit()
+        user_id, username, role = u['id'], u['username'], u['role']
+    else:
+        base = (email.split('@')[0] or 'user').replace('[^A-Za-z0-9_.-]', '')[:24] or 'user'
+        username = base
+        n = 1
+        while cur.execute(q("SELECT id FROM users WHERE username = %s",
+                            "SELECT id FROM users WHERE username = ?"), (username,)).fetchone():
+            n += 1
+            username = f'{base}{n}'
+        pw = hash_password(secrets.token_urlsafe(12))
+        cur.execute(q("INSERT INTO users (username, password, role, email, full_name, avatar, google_id) "
+                      "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                      "INSERT INTO users (username, password, role, email, full_name, avatar, google_id) "
+                      "VALUES (?, ?, ?, ?, ?, ?, ?)"),
+                    (username, pw, 'user', email, full_name, picture, google_sub))
+        conn.commit()
+        user_id = cur.lastrowid
+        if not user_id:
+            row = cur.execute(q("SELECT id FROM users WHERE google_id = %s",
+                                "SELECT * FROM users WHERE google_id = ?"), (google_sub,)).fetchone()
+            user_id = dict(row)['id']
+        username, role = username, 'user'
+
+    try:
+        cur.execute(q("INSERT INTO login_history (user_id, ip, user_agent) VALUES (%s, %s, %s)",
+                      "INSERT INTO login_history (user_id, ip, user_agent) VALUES (?, ?, ?)"),
+                    (user_id, request.remote_addr or '', (request.headers.get('User-Agent') or '')[:300]))
+        conn.commit()
+    except Exception:
+        pass
+    conn.close()
+
+    session['user_id'] = user_id
+    session['username'] = username
+    session['role'] = role
+    nxt = session.pop('google_next', '/dashboard')
+    if not str(nxt).startswith('/'):
+        nxt = '/dashboard'
+    return redirect(nxt)
+
+
+@app.route('/api/profile/google-unlink', methods=['POST'])
+@login_required
+def api_google_unlink():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(q("UPDATE users SET google_id = '' WHERE id = %s",
+                  "UPDATE users SET google_id = '' WHERE id = ?"), (session['user_id'],))
+    conn.commit()
+    conn.close()
+    return jsonify({'message': 'Đã gỡ liên kết Google'})
 
 
 @app.route('/register')
