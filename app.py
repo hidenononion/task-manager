@@ -99,7 +99,13 @@ app.config.update(
     MAX_CONTENT_LENGTH=MAX_UPLOAD_BYTES + 1024 * 1024,
 )
 
-if os.environ.get('TRUST_PROXY', '').lower() in ('1', 'true', 'yes'):
+_trust_proxy = os.environ.get('TRUST_PROXY')
+if _trust_proxy is None:
+    _trust_proxy = bool(os.environ.get('DATABASE_URL')) or os.environ.get('FLASK_ENV') == 'production'
+else:
+    _trust_proxy = _trust_proxy.strip().lower() in ('1', 'true', 'yes', 'on')
+
+if _trust_proxy:
     from werkzeug.middleware.proxy_fix import ProxyFix
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
@@ -193,6 +199,25 @@ def payload_too_large(_err):
     return 'Payload too large', 413
 
 
+@app.errorhandler(Exception)
+def handle_unexpected_error(err):
+    from werkzeug.exceptions import HTTPException
+    if isinstance(err, HTTPException):
+        return err
+    logger.exception('Unhandled error on %s %s', request.method, request.path)
+    db_down = err.__class__.__name__ in (
+        'OperationalError', 'InterfaceError', 'DatabaseError', 'ProgrammingError',
+        'ConnectionException', 'OperationalError',
+    )
+    if request.path.startswith('/api/'):
+        if db_down:
+            return api_error('Không kết nối được cơ sở dữ liệu, thử lại sau', 503)
+        return api_error('Lỗi hệ thống, thử lại sau', 500)
+    if db_down:
+        return 'Không kết nối được cơ sở dữ liệu. Vui lòng thử lại sau.', 503
+    return 'Lỗi hệ thống. Vui lòng thử lại sau.', 500
+
+
 @app.errorhandler(500)
 def internal_error(err):
     logger.error('Loi khong xu ly %s %s: %s', request.method, request.path, err)
@@ -211,12 +236,13 @@ LOCAL_DB = os.environ.get('TASKMGR_DB_PATH') or os.path.join(BASE_DIR, 'database
 def get_db():
     if DATABASE_URL:
         import psycopg
-        conn = psycopg.connect(DATABASE_URL, row_factory=psycopg.rows.dict_row)
+        conn = psycopg.connect(DATABASE_URL, row_factory=psycopg.rows.dict_row,
+                               connect_timeout=10)
         conn.autocommit = False
         return conn
     else:
         import sqlite3
-        conn = sqlite3.connect(LOCAL_DB)
+        conn = sqlite3.connect(LOCAL_DB, timeout=10)
         conn.row_factory = sqlite3.Row
         conn.execute('PRAGMA foreign_keys = ON')
         return conn
@@ -226,9 +252,15 @@ def is_pg():
     return bool(DATABASE_URL)
 
 
-def init_db():
-    conn = get_db()
+def _init_db_body(conn):
     cur = conn.cursor()
+
+    if is_pg():
+        try:
+            cur.execute("SET lock_timeout = '8s'")
+            cur.execute("SET statement_timeout = '20s'")
+        except Exception:
+            pass
 
     if is_pg():
         cur.execute('''
@@ -642,8 +674,23 @@ def init_db():
     except Exception:
         pass
 
-    conn.commit()
-    conn.close()
+
+def init_db():
+    conn = get_db()
+    try:
+        _init_db_body(conn)
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def hash_password(password):
