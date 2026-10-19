@@ -1128,11 +1128,25 @@ def api_restore_full():
                 continue
             ph = ','.join(['%s'] * len(keys)) if is_pg() else ','.join(['?'] * len(keys))
             try:
-                cur.execute(f"INSERT INTO {tbl} ({','.join(keys)}) VALUES ({ph})",
-                            [use[k] for k in keys])
-                n += 1
+                cur.execute('SAVEPOINT restore_row')
             except Exception:
                 pass
+            try:
+                cur.execute(f"INSERT INTO {tbl} ({','.join(keys)}) VALUES ({ph})",
+                            [use[k] for k in keys])
+                try:
+                    cur.execute('RELEASE SAVEPOINT restore_row')
+                except Exception:
+                    pass
+                n += 1
+            except Exception:
+                try:
+                    cur.execute('ROLLBACK TO SAVEPOINT restore_row')
+                except Exception:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
         if n:
             counts[tbl] = n
     conn.commit()
