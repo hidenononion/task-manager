@@ -701,8 +701,27 @@ def google_configured():
 
 
 def _google_redirect_uri():
-    return (os.environ.get('GOOGLE_REDIRECT_URI')
-            or url_for('auth_google_callback', _external=True))
+    env = (os.environ.get('GOOGLE_REDIRECT_URI') or '').strip()
+    if env:
+        return env
+    host = request.host or 'task-manager-v1t6.onrender.com'
+    return f'https://{host}/auth/google/callback'
+
+
+@app.route('/auth/google/config')
+def auth_google_config():
+    """Cho biết chính xác client_id va redirect_uri dang gui len Google."""
+    return jsonify({
+        'configured': google_configured(),
+        'client_id': (os.environ.get('GOOGLE_CLIENT_ID') or '').strip(),
+        'redirect_uri': _google_redirect_uri(),
+        'authorize_url': GOOGLE_AUTH_URL + '?' + urlencode({
+            'client_id': (os.environ.get('GOOGLE_CLIENT_ID') or '').strip(),
+            'redirect_uri': _google_redirect_uri(),
+            'response_type': 'code',
+            'scope': 'openid email profile',
+        }),
+    })
 
 
 @app.route('/auth/google')
