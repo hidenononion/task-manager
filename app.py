@@ -56,6 +56,10 @@ def inject_static_versions():
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+if DATABASE_URL and 'sslmode=' not in DATABASE_URL:
+    _host = DATABASE_URL.split('@')[-1].split('/')[0].lower()
+    if 'neon.tech' in _host or 'supabase.' in _host:
+        DATABASE_URL += ('&' if '?' in DATABASE_URL else '?') + 'sslmode=require'
 
 LOCAL_DB = os.path.join(os.path.dirname(__file__), 'database.db')
 
@@ -64,7 +68,7 @@ def get_db():
     if DATABASE_URL:
         import psycopg
         conn = psycopg.connect(DATABASE_URL, row_factory=psycopg.rows.dict_row,
-                               connect_timeout=10)
+                               connect_timeout=15)
         conn.autocommit = False
         return conn
     else:
