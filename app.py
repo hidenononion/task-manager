@@ -829,7 +829,34 @@ def run_automation(conn, event, task):
 
 @app.route('/health')
 def health():
-    return {'status': 'ok'}, 200
+    if request.args.get('deep') not in ('1', 'true', 'yes'):
+        return {'status': 'ok'}, 200
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('SELECT 1')
+        cur.fetchone()
+        conn.close()
+        return {'status': 'ok', 'db': 'ok'}, 200
+    except Exception as err:
+        msg = str(err).lower()
+        if 'no module named' in msg:
+            cat = 'driver_missing'
+        elif 'translate host' in msg or 'name or service' in msg or 'nodename' in msg:
+            cat = 'dns'
+        elif 'timeout' in msg or 'timed out' in msg:
+            cat = 'timeout'
+        elif 'refused' in msg:
+            cat = 'refused'
+        elif 'password' in msg or 'authentication' in msg or 'role' in msg and 'does not exist' in msg:
+            cat = 'auth'
+        elif 'does not exist' in msg:
+            cat = 'missing_db'
+        elif 'ssl' in msg:
+            cat = 'ssl'
+        else:
+            cat = 'error'
+        return {'status': 'degraded', 'db': cat, 'type': err.__class__.__name__}, 503
 
 @app.route('/favicon.ico')
 def favicon():
