@@ -22,7 +22,7 @@ echo "[2/6] Setting up app directory..."
 mkdir -p $APP_DIR
 cd $APP_DIR
 
-# 3. Clone or update repo (phai clone vao thu muc trong truoc khi tao .env)
+# 3. Clone or update repo
 if [ -d ".git" ]; then
     echo "Pulling latest changes..."
     git pull
@@ -30,23 +30,6 @@ else
     echo "Cloning repository..."
     git clone $REPO_URL .
 fi
-
-# Secret key + cookie flag (khong commit file .env)
-umask 077
-touch "$APP_DIR/.env"
-chmod 600 "$APP_DIR/.env"
-if ! grep -q '^SECRET_KEY=' "$APP_DIR/.env"; then
-    echo "SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')" >> "$APP_DIR/.env"
-    echo "Da them SECRET_KEY ngau nhien vao $APP_DIR/.env."
-fi
-if ! grep -q '^SESSION_COOKIE_SECURE=' "$APP_DIR/.env"; then
-    echo "SESSION_COOKIE_SECURE=1" >> "$APP_DIR/.env"
-fi
-
-mkdir -p "$APP_DIR/instance" "$APP_DIR/uploads"
-touch "$APP_DIR/database.db"
-chown -R www-data:www-data "$APP_DIR/instance" "$APP_DIR/uploads" "$APP_DIR/database.db"
-chmod 700 "$APP_DIR/instance"
 
 # 4. Setup Python virtual environment
 echo "[3/6] Setting up Python environment..."
@@ -66,8 +49,7 @@ User=www-data
 Group=www-data
 WorkingDirectory=$APP_DIR
 Environment="PATH=$APP_DIR/venv/bin"
-EnvironmentFile=$APP_DIR/.env
-ExecStart=$APP_DIR/venv/bin/gunicorn wsgi:app --workers 3 --timeout 60 --bind unix:taskmanager.sock
+ExecStart=$APP_DIR/venv/bin/gunicorn wsgi:app --workers 3 --bind unix:taskmanager.sock
 Restart=always
 
 [Install]

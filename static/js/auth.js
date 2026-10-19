@@ -58,7 +58,7 @@ async function handleLogin(e) {
     const btn = e.target.querySelector('.main-btn');
     errorEl.textContent = '';
     const username = document.getElementById('username').value.trim();
-    const password = document.getElementById('password').value;
+    const password = document.getElementById('password').value.trim();
     if (!username || !password) { errorEl.textContent = 'Vui lòng nhập đầy đủ thông tin'; shakeCard(); return; }
     setBtnLoading(btn, true, 'Đang đăng nhập...');
     try {
@@ -85,11 +85,11 @@ async function handleRegister(e) {
     const btn = e.target.querySelector('.main-btn');
     errorEl.textContent = '';
     const username = document.getElementById('regUsername').value.trim();
-    const password = document.getElementById('regPassword').value;
-    const confirmPassword = document.getElementById('confirmPassword').value;
+    const password = document.getElementById('regPassword').value.trim();
+    const confirmPassword = document.getElementById('confirmPassword').value.trim();
     if (!username || !password || !confirmPassword) { errorEl.textContent = 'Vui lòng nhập đầy đủ thông tin'; shakeCard(); return; }
     if (password !== confirmPassword) { errorEl.textContent = 'Password xác nhận không khớp'; shakeCard(); return; }
-    if (password.length < 8) { errorEl.textContent = 'Password phải có ít nhất 8 ký tự'; shakeCard(); return; }
+    if (password.length < 4) { errorEl.textContent = 'Password phải có ít nhất 4 ký tự'; shakeCard(); return; }
     setBtnLoading(btn, true, 'Đang tạo...');
     try {
         const res = await fetch('/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) });

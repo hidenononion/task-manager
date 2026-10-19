@@ -1,69 +1,17 @@
 import os
 import csv
 import hashlib
-import hmac
 import io
-import logging
-import math
-import re
 import secrets
-import urllib.request
+from datetime import datetime
 from functools import wraps
-from urllib.parse import urlsplit
 
 from flask import (  # pyright: ignore[reportMissingImports]
     Flask, request, jsonify, session, render_template, redirect, url_for, Response
 )
-from werkzeug.security import generate_password_hash, check_password_hash
-
-from security import (
-    ALLOWED_UPLOAD_EXTENSIONS, MAX_UPLOAD_BYTES, SlidingWindowLimiter,
-    csv_safe, file_signature_ok, is_public_http_url, is_safe_link_url, safe_filename,
-)
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-INSTANCE_DIR = os.path.join(BASE_DIR, 'instance')
-
-logger = logging.getLogger('taskmanager')
-if not logger.handlers:
-    logging.basicConfig(level=os.environ.get('LOG_LEVEL', 'INFO'),
-                        format='%(asctime)s %(levelname)s %(name)s: %(message)s')
-
-
-def _load_secret_key():
-    """Lay SECRET_KEY tu env, hoac sinh file ngau nhien chi doc boi app.
-
-    Khong con fallback hard-code: neu thieu key, moi session cu se bi vo hieu
-    luc khoi dong lai, nhung ke tan cong khong the tu ky cookie.
-    """
-    env_key = (os.environ.get('SECRET_KEY') or '').strip()
-    if len(env_key) >= 32:
-        return env_key
-    key_path = os.environ.get('SECRET_KEY_FILE') or os.path.join(INSTANCE_DIR, 'secret_key')
-    try:
-        with open(key_path, 'r', encoding='utf-8') as fh:
-            saved = fh.read().strip()
-        if len(saved) >= 32:
-            return saved
-    except OSError:
-        pass
-    new_key = secrets.token_hex(32)
-    try:
-        os.makedirs(os.path.dirname(key_path), exist_ok=True)
-        fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, 'w', encoding='utf-8') as fh:
-            fh.write(new_key)
-        try:
-            os.chmod(key_path, 0o600)
-        except OSError:
-            pass
-    except OSError as exc:
-        logger.warning('Khong ghi duoc SECRET_KEY_FILE (%s); dung key tam thoi trong bo nho', exc)
-    return new_key
-
 
 app = Flask(__name__)
-app.secret_key = _load_secret_key()
+app.secret_key = os.environ.get('SECRET_KEY', 'dtnlamkhe-secret-change-in-production')
 
 # ─── Load environment variables ───────────────────────────────────────
 
@@ -83,36 +31,8 @@ if not os.getenv('GOOGLE_CLIENT_ID'):
                     os.environ.setdefault(_k, _val.strip())
 # ─────────────────────────────────────────────────────────────────────────
 
-_secure_flag = os.environ.get('SESSION_COOKIE_SECURE')
-if _secure_flag is None:
-    _cookie_secure = (os.environ.get('FLASK_ENV') == 'production'
-                      or bool(os.environ.get('DATABASE_URL')))
-else:
-    _cookie_secure = _secure_flag.strip().lower() not in ('0', 'false', 'no', 'off')
-
-app.config.update(
-    SESSION_COOKIE_SECURE=_cookie_secure,
-    SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE='Lax',
-    SESSION_COOKIE_NAME='taskmgr_session',
-    PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 7,
-    MAX_CONTENT_LENGTH=MAX_UPLOAD_BYTES + 1024 * 1024,
-)
-
-_trust_proxy = os.environ.get('TRUST_PROXY')
-if _trust_proxy is None:
-    _trust_proxy = bool(os.environ.get('DATABASE_URL')) or os.environ.get('FLASK_ENV') == 'production'
-else:
-    _trust_proxy = _trust_proxy.strip().lower() in ('1', 'true', 'yes', 'on')
-
-if _trust_proxy:
-    from werkzeug.middleware.proxy_fix import ProxyFix
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
-
-# Gioi han thu dang nhap / dang ky (bo dem trong bo nho, moi worker rieng).
-_login_limiter = SlidingWindowLimiter(5, 300)       # 5 lan sai / 5 phut / (ip+username)
-_login_ip_limiter = SlidingWindowLimiter(20, 300)   # 20 lan sai / 5 phut / ip
-_register_limiter = SlidingWindowLimiter(5, 3600)   # 5 tai khoan / gio / ip
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
 
 
 def _static_version(filename):
@@ -130,107 +50,11 @@ def inject_static_versions():
         'authjs_version': _static_version(os.path.join('js', 'auth.js')),
     }
 
-
-UNSAFE_METHODS = {'POST', 'PUT', 'PATCH', 'DELETE'}
-CSP_POLICY = (
-    "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
-    "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://fonts.googleapis.com; "
-    "font-src 'self' data: https://cdnjs.cloudflare.com https://fonts.gstatic.com; "
-    "img-src 'self' data: https: blob:; "
-    "connect-src 'self'; object-src 'self'; base-uri 'self'; frame-ancestors 'none'"
-)
-
-
-def is_admin():
-    """So sanh role chinh xac (khong dung 'in' vi de nham substring)."""
-    return session.get('role') == 'bithu'
-
-
-def client_ip():
-    return request.remote_addr or 'unknown'
-
-
-def too_many_requests(retry_after, message='Quá nhiều lần thử, vui lòng đợi'):
-    resp = jsonify({'error': message, 'retry_after': retry_after})
-    resp.status_code = 429
-    resp.headers['Retry-After'] = str(retry_after)
-    return resp
-
-
-def api_error(message, status=400):
-    return jsonify({'error': message}), status
-
-
-@app.before_request
-def csrf_same_origin_guard():
-    """Chan CSRF cho API ghi du lieu: cookie SameSite=Lax + kiem tra Origin."""
-    if request.method not in UNSAFE_METHODS or not request.path.startswith('/api/'):
-        return None
-    if (request.headers.get('Sec-Fetch-Site') or '').lower() == 'cross-site':
-        return api_error('Yêu cầu cross-site bị chặn', 403)
-    origin = request.headers.get('Origin')
-    if origin:
-        try:
-            origin_host = urlsplit(origin).netloc.lower()
-        except ValueError:
-            origin_host = ''
-        if not origin_host or origin_host != (request.host or '').lower():
-            return api_error('Origin không hợp lệ', 403)
-    return None
-
-
-@app.after_request
-def security_headers(resp):
-    resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
-    resp.headers.setdefault('X-Frame-Options', 'DENY')
-    resp.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
-    resp.headers.setdefault('Permissions-Policy', 'geolocation=(), microphone=(), camera=()')
-    resp.headers.setdefault('Content-Security-Policy', CSP_POLICY)
-    if app.config.get('SESSION_COOKIE_SECURE'):
-        resp.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
-    return resp
-
-
-@app.errorhandler(413)
-def payload_too_large(_err):
-    if request.path.startswith('/api/'):
-        return api_error('File quá lớn (tối đa 20MB)', 413)
-    return 'Payload too large', 413
-
-
-@app.errorhandler(Exception)
-def handle_unexpected_error(err):
-    from werkzeug.exceptions import HTTPException
-    if isinstance(err, HTTPException):
-        return err
-    logger.exception('Unhandled error on %s %s', request.method, request.path)
-    db_down = err.__class__.__name__ in (
-        'OperationalError', 'InterfaceError', 'DatabaseError', 'ProgrammingError',
-        'ConnectionException', 'OperationalError',
-    )
-    if request.path.startswith('/api/'):
-        if db_down:
-            return api_error('Không kết nối được cơ sở dữ liệu, thử lại sau', 503)
-        return api_error('Lỗi hệ thống, thử lại sau', 500)
-    if db_down:
-        return 'Không kết nối được cơ sở dữ liệu. Vui lòng thử lại sau.', 503
-    return 'Lỗi hệ thống. Vui lòng thử lại sau.', 500
-
-
-@app.errorhandler(500)
-def internal_error(err):
-    logger.error('Loi khong xu ly %s %s: %s', request.method, request.path, err)
-    if request.path.startswith('/api/'):
-        return api_error('Lỗi máy chủ', 500)
-    return 'Internal server error', 500
-
-
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
     DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 
-LOCAL_DB = os.environ.get('TASKMGR_DB_PATH') or os.path.join(BASE_DIR, 'database.db')
+LOCAL_DB = os.path.join(os.path.dirname(__file__), 'database.db')
 
 
 def get_db():
@@ -587,30 +411,15 @@ def _init_db_body(conn):
             );
         ''')
 
-    admin = cur.execute("SELECT id, password FROM users WHERE username = 'admin'").fetchone()
+    admin = cur.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()
     if not admin:
-        bootstrap_pw = (os.environ.get('ADMIN_PASSWORD') or '').strip()
-        generated = len(bootstrap_pw) < 8
-        if generated:
-            bootstrap_pw = secrets.token_urlsafe(12)
+        pw = hashlib.sha256('admin123'.encode()).hexdigest()
         cur.execute(q("INSERT INTO users (username, password, role) VALUES (%s, %s, %s)",
                       "INSERT INTO users (username, password, role) VALUES (?, ?, ?)"),
-                    ('admin', hash_password(bootstrap_pw), 'bithu'))
-        if generated:
-            pw_path = os.path.join(INSTANCE_DIR, 'admin_initial_password.txt')
-            try:
-                os.makedirs(INSTANCE_DIR, exist_ok=True)
-                fd = os.open(pw_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-                with os.fdopen(fd, 'w', encoding='utf-8') as fh:
-                    fh.write('admin\n' + bootstrap_pw + '\n')
-                logger.warning('Da tao tai khoan admin voi mat khau ngau nhien. Xem %s roi doi mat khau.', pw_path)
-            except OSError as exc:
-                logger.warning('Da tao admin voi mat khau ngau nhien nhung khong ghi duoc file: %s', exc)
+                     ('admin', pw, 'bithu'))
     else:
         cur.execute(q("UPDATE users SET role = 'bithu' WHERE username = 'admin' AND role != 'bithu'",
                       "UPDATE users SET role = 'bithu' WHERE username = 'admin' AND role != 'bithu'"))
-        if verify_password(dict(admin).get('password') or '', 'admin123'):
-            logger.warning('CANH BAO: tai khoan admin van dung mat khau mac dinh admin123. Hay doi ngay.')
 
     if not is_pg():
         try:
@@ -694,36 +503,7 @@ def init_db():
 
 
 def hash_password(password):
-    """Hash mat khau bang scrypt (werkzeug). Khong con SHA-256 tho."""
-    try:
-        return generate_password_hash(password)
-    except (ValueError, RuntimeError):
-        # Mot so ban Python khong co OpenSSL scrypt: lui ve PBKDF2.
-        return generate_password_hash(password, method='pbkdf2:sha256:600000')
-
-
-def _looks_like_legacy_hash(stored):
-    """SHA-256 tran (64 hex) tu phien ban cu."""
-    return bool(stored) and len(stored) == 64 and all(c in '0123456789abcdefABCDEF' for c in stored)
-
-
-def verify_password(stored, password):
-    """Kiem tra mat khau, ho tro hash SHA-256 cu de nang cap dan."""
-    if not stored or password is None:
-        return False
-    if _looks_like_legacy_hash(stored):
-        return hmac.compare_digest(stored.lower(), hashlib.sha256(password.encode()).hexdigest())
-    try:
-        return check_password_hash(stored, password)
-    except (ValueError, TypeError):
-        return False
-
-
-def password_needs_rehash(stored):
-    """True neu hash cu (SHA-256) hoac khong phai dinh dang werkzeug hien tai."""
-    if not stored:
-        return False
-    return _looks_like_legacy_hash(stored) or not stored.startswith(('scrypt:', 'pbkdf2:'))
+    return hashlib.sha256(password.encode()).hexdigest()
 
 
 def login_required(f):
@@ -740,7 +520,7 @@ def login_required(f):
 def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if not is_admin():
+        if session.get('role') != 'bithu':
             if request.path.startswith('/api/'):
                 return jsonify({'error': 'Admin access required'}), 403
             return redirect(url_for('dashboard'))
@@ -763,27 +543,12 @@ def ensure_column(cur, table, column, pg_type):
             cur.execute(f'ALTER TABLE {table} ADD COLUMN {column} {lite_type}')
 
 
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
-
-
 def post_json_best_effort(url, payload):
-    """Gui webhook ra ngoai, chan SSRF (host noi bo / redirect)."""
-    if not is_public_http_url(url):
-        try:
-            host = urlsplit(url).hostname
-        except ValueError:
-            host = 'invalid'
-        logger.warning('Bo qua webhook khong an toan (host=%s)', host)
-        return
     try:
         import json as _json
-        opener = urllib.request.build_opener(_NoRedirect)
-        req = urllib.request.Request(url, data=_json.dumps(payload).encode(),
-                           headers={'Content-Type': 'application/json',
-                                    'User-Agent': 'LamKhe-TaskManager/1.0'})
-        opener.open(req, timeout=4).read()
+        import urllib.request as _url
+        req = _url.Request(url, data=_json.dumps(payload).encode(), headers={'Content-Type': 'application/json'})
+        _url.urlopen(req, timeout=4).read()
     except Exception:
         pass
 
@@ -848,7 +613,7 @@ def health():
             cat = 'timeout'
         elif 'refused' in msg:
             cat = 'refused'
-        elif 'password' in msg or 'authentication' in msg or 'role' in msg and 'does not exist' in msg:
+        elif 'password' in msg or 'authentication' in msg:
             cat = 'auth'
         elif 'does not exist' in msg:
             cat = 'missing_db'
@@ -857,6 +622,26 @@ def health():
         else:
             cat = 'error'
         return {'status': 'degraded', 'db': cat, 'type': err.__class__.__name__}, 503
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(err):
+    from werkzeug.exceptions import HTTPException
+    if isinstance(err, HTTPException):
+        return err
+    logging.getLogger('taskmanager').exception(
+        'Unhandled error on %s %s', request.method, request.path)
+    db_down = err.__class__.__name__ in (
+        'OperationalError', 'InterfaceError', 'DatabaseError', 'ProgrammingError',
+        'ConnectionException',
+    )
+    if request.path.startswith('/api/'):
+        if db_down:
+            return jsonify({'error': 'Không kết nối được cơ sở dữ liệu, thử lại sau'}), 503
+        return jsonify({'error': 'Lỗi hệ thống, thử lại sau'}), 500
+    if db_down:
+        return 'Không kết nối được cơ sở dữ liệu. Vui lòng thử lại sau.', 503
+    return 'Lỗi hệ thống. Vui lòng thử lại sau.', 500
 
 @app.route('/favicon.ico')
 def favicon():
@@ -887,36 +672,16 @@ def dashboard():
 
 # ==================== AUTH API ====================
 
-USERNAME_RE = re.compile(r'^[A-Za-z0-9._-]{3,32}$')
-MIN_PASSWORD_LENGTH = 8
-MAX_PASSWORD_LENGTH = 128
-
-
-def validate_new_password(password):
-    if not isinstance(password, str) or len(password) < MIN_PASSWORD_LENGTH:
-        return f'Mật khẩu phải có ít nhất {MIN_PASSWORD_LENGTH} ký tự'
-    if len(password) > MAX_PASSWORD_LENGTH:
-        return f'Mật khẩu tối đa {MAX_PASSWORD_LENGTH} ký tự'
-    return None
-
-
 @app.route('/api/register', methods=['POST'])
 def api_register():
-    retry = _register_limiter.hit(client_ip())
-    if retry:
-        return too_many_requests(retry, 'Bạn đã tạo quá nhiều tài khoản, thử lại sau')
-
-    data = request.get_json(silent=True) or {}
-    username = (data.get('username') or '').strip()
-    password = data.get('password') or ''
+    data = request.get_json()
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
 
     if not username or not password:
         return jsonify({'error': 'Username và password không được để trống'}), 400
-    if not USERNAME_RE.match(username):
-        return jsonify({'error': 'Username 3-32 ký tự, chỉ gồm chữ, số, dấu chấm, gạch dưới, gạch ngang'}), 400
-    pw_error = validate_new_password(password)
-    if pw_error:
-        return jsonify({'error': pw_error}), 400
+    if len(password) < 4:
+        return jsonify({'error': 'Password phải có ít nhất 4 ký tự'}), 400
 
     conn = get_db()
     cur = conn.cursor()
@@ -925,72 +690,42 @@ def api_register():
         conn.close()
         return jsonify({'error': 'Username đã tồn tại'}), 400
 
-    try:
-        cur.execute(q("INSERT INTO users (username, password, role) VALUES (%s, %s, %s)",
-                      "INSERT INTO users (username, password, role) VALUES (?, ?, ?)"),
-                    (username, hash_password(password), 'user'))
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        conn.close()
-        return jsonify({'error': 'Username đã tồn tại'}), 400
+    cur.execute(q("INSERT INTO users (username, password, role) VALUES (%s, %s, %s)",
+                  "INSERT INTO users (username, password, role) VALUES (?, ?, ?)"),
+                (username, hash_password(password), 'user'))
+    conn.commit()
     conn.close()
     return jsonify({'message': 'Đăng ký thành công'}), 201
 
 
-_DUMMY_HASH = hash_password('freebuff-dummy-password')
-
-
 @app.route('/api/login', methods=['POST'])
 def api_login():
-    data = request.get_json(silent=True) or {}
-    username = (data.get('username') or '').strip()
-    password = data.get('password') or ''
-    ip = client_ip()
-    limit_key = f'{ip}|{username.lower()}'
-
-    retry = _login_ip_limiter.hit(ip)
-    if retry:
-        return too_many_requests(retry, 'Quá nhiều lần đăng nhập thất bại, thử lại sau')
-    retry = _login_limiter.hit(limit_key)
-    if retry:
-        return too_many_requests(retry, 'Quá nhiều lần đăng nhập thất bại, thử lại sau')
+    data = request.get_json() or {}
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
 
     conn = get_db()
     cur = conn.cursor()
-    user = cur.execute(q("SELECT * FROM users WHERE username = %s",
-                         "SELECT * FROM users WHERE username = ?"), (username,)).fetchone()
+    user = cur.execute(q("SELECT * FROM users WHERE username = %s AND password = %s",
+                         "SELECT * FROM users WHERE username = ? AND password = ?"),
+                       (username, hash_password(password))).fetchone()
 
-    stored = dict(user).get('password') if user else ''
-    # Luon chay mot phep hash de giam chenh lech thoi gian (user enumeration).
-    password_ok = verify_password(stored or _DUMMY_HASH, password)
-    if not user or not password_ok:
+    if not user:
         conn.close()
         return jsonify({'error': 'Sai username hoặc password'}), 401
 
     u = dict(user)
-    try:
-        if password_needs_rehash(stored):
-            cur.execute(q("UPDATE users SET password = %s WHERE id = %s",
-                          "UPDATE users SET password = ? WHERE id = ?"),
-                        (hash_password(password), u['id']))
-    except Exception:
-        pass
-    session.clear()
-    session.permanent = True
     session['user_id'] = u['id']
     session['username'] = u['username']
     session['role'] = u['role']
     try:
         cur.execute(q("INSERT INTO login_history (user_id, ip, user_agent) VALUES (%s, %s, %s)",
                       "INSERT INTO login_history (user_id, ip, user_agent) VALUES (?, ?, ?)"),
-                    (u['id'], ip, (request.headers.get('User-Agent') or '')[:300]))
+                    (u['id'], request.remote_addr or '', (request.headers.get('User-Agent') or '')[:300]))
         conn.commit()
     except Exception:
         pass
     conn.close()
-    _login_limiter.reset(limit_key)
-    _login_ip_limiter.reset(ip)
 
     return jsonify({
         'message': 'Đăng nhập thành công',
@@ -1040,12 +775,10 @@ def api_users():
 @login_required
 @admin_required
 def api_update_role(user_id):
-    data = request.get_json(silent=True) or {}
+    data = request.get_json()
     new_role = data.get('role')
     if new_role not in ('user', 'bithu'):
         return jsonify({'error': 'Role không hợp lệ'}), 400
-    if user_id == session.get('user_id') and new_role != 'bithu':
-        return jsonify({'error': 'Không thể tự hạ quyền chính mình'}), 400
     conn = get_db()
     cur = conn.cursor()
     cur.execute(q("UPDATE users SET role = %s WHERE id = %s", "UPDATE users SET role = ? WHERE id = ?"), (new_role, user_id))
@@ -1119,20 +852,12 @@ PREF_FIELDS = ['theme', 'language', 'timezone', 'date_format', 'time_format', 'd
                'auto_done_unfollow', 'auto_overdue_warn']
 INT_FIELDS = {'cal_google', 'cal_outlook', 'store_drive', 'store_onedrive', 'store_dropbox',
               'auto_done_unfollow', 'auto_overdue_warn'}
-ENUM_FIELDS = {
-    'theme': {'dark', 'light', 'system'},
-    'language': {'vi', 'en'},
-    'timezone': {'Asia/Ho_Chi_Minh', 'Asia/Bangkok', 'UTC'},
-    'date_format': {'DD/MM/YYYY', 'MM/DD/YYYY'},
-    'time_format': {'24h', '12h'},
-    'default_view': {'kanban', 'list', 'gantt', 'calendar', 'workload'},
-}
 
 
 @app.route('/api/profile', methods=['PUT'])
 @login_required
 def api_profile_update():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json() or {}
     updates = {}
     for f in PROFILE_FIELDS + PREF_FIELDS + EXTRA_FIELDS:
         if f in data:
@@ -1142,15 +867,6 @@ def api_profile_update():
                     v = 1 if str(v).lower() in ('1', 'true', 'on', 'yes') or v is True or v == 1 else 0
                 except Exception:
                     v = 0
-            else:
-                v = '' if v is None else str(v).strip()
-                if f in ('avatar', 'slack_url', 'teams_url') and v and not is_safe_link_url(v):
-                    return jsonify({'error': f'{f} phải là URL http(s) hợp lệ'}), 400
-                if f in ('slack_url', 'teams_url') and v and not is_public_http_url(v, resolve_dns=False):
-                    return jsonify({'error': f'{f} không được trỏ tới địa chỉ nội bộ'}), 400
-                if f in ENUM_FIELDS and v not in ENUM_FIELDS[f]:
-                    return jsonify({'error': f'{f} không hợp lệ'}), 400
-                v = v[:2048]
             updates[f] = v
     if not updates:
         return jsonify({'error': 'Không có gì để cập nhật'}), 400
@@ -1176,14 +892,13 @@ def api_change_password():
     data = request.get_json() or {}
     old = data.get('old_password', '')
     new = data.get('new_password', '')
-    pw_error = validate_new_password(new)
-    if pw_error:
-        return jsonify({'error': pw_error}), 400
+    if len(new) < 4:
+        return jsonify({'error': 'Mật khẩu mới ít nhất 4 ký tự'}), 400
     conn = get_db()
     cur = conn.cursor()
     user = cur.execute(q("SELECT * FROM users WHERE id = %s", "SELECT * FROM users WHERE id = ?"),
                        (session['user_id'],)).fetchone()
-    if not user or not verify_password(dict(user)['password'], old):
+    if not user or dict(user)['password'] != hash_password(old):
         conn.close()
         return jsonify({'error': 'Mật khẩu cũ không đúng'}), 400
     cur.execute(q("UPDATE users SET password = %s WHERE id = %s", "UPDATE users SET password = ? WHERE id = ?"),
@@ -1284,14 +999,11 @@ def api_webhooks():
         rows = cur.execute("SELECT * FROM webhooks ORDER BY id DESC").fetchall()
         conn.close()
         return jsonify([dict(r) for r in rows])
-    data = request.get_json(silent=True) or {}
+    data = request.get_json() or {}
     url = (data.get('url') or '').strip()
     if not url:
         conn.close()
         return jsonify({'error': 'Thiếu URL'}), 400
-    if not is_public_http_url(url):
-        conn.close()
-        return jsonify({'error': 'Webhook phải là URL http(s) công khai (không dùng localhost/IP nội bộ)'}), 400
     cur.execute(q("INSERT INTO webhooks (url, event, enabled, created_by) VALUES (%s, %s, %s, %s)",
                   "INSERT INTO webhooks (url, event, enabled, created_by) VALUES (?, ?, ?, ?)"),
                 (url, data.get('event', 'task.done'), 1 if data.get('enabled', True) else 0, session['user_id']))
@@ -1324,16 +1036,13 @@ def api_export(kind):
         w.writerow(['id', 'title', 'description', 'status', 'priority', 'due_date', 'points', 'scope', 'created_at'])
         for r in rows:
             d = dict(r)
-            w.writerow([d.get('id'), csv_safe(d.get('title')), csv_safe(d.get('description')),
-                        csv_safe(d.get('status')), csv_safe(d.get('priority')), d.get('due_date'),
-                        d.get('points'), d.get('scope', 'lang'), d.get('created_at')])
+            w.writerow([d.get('id'), d.get('title'), d.get('description'), d.get('status'), d.get('priority'), d.get('due_date'), d.get('points'), d.get('scope', 'lang'), d.get('created_at')])
     elif kind == 'finance.csv':
         rows = cur.execute("SELECT id, type, amount, description, category, date FROM finance ORDER BY id").fetchall()
         w.writerow(['id', 'type', 'amount', 'description', 'category', 'date'])
         for r in rows:
             d = dict(r)
-            w.writerow([d.get('id'), d.get('type'), d.get('amount'), csv_safe(d.get('description')),
-                        csv_safe(d.get('category')), d.get('date')])
+            w.writerow([d.get('id'), d.get('type'), d.get('amount'), d.get('description'), d.get('category'), d.get('date')])
     else:
         conn.close()
         return jsonify({'error': 'Loại không hỗ trợ'}), 400
@@ -1469,73 +1178,6 @@ def get_task_assignees(conn, task_id):
     return [dict(r) for r in rows]
 
 
-def _chunks(seq, size=500):
-    for i in range(0, len(seq), size):
-        yield seq[i:i + size]
-
-
-def _lock_task(conn, task_id):
-    """Khoa dong task de tranh race (2 nguoi cung nhan / cung danh dau done)."""
-    cur = conn.cursor()
-    if is_pg():
-        return cur.execute("SELECT * FROM tasks WHERE id = %s FOR UPDATE", (task_id,)).fetchone()
-    conn.execute("BEGIN IMMEDIATE")
-    return cur.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
-
-
-def serialize_tasks(conn, tasks, user_id=None):
-    """Serialize nhieu task bang 4 query batch thay vi 4 query moi task (N+1)."""
-    rows = [dict(t) for t in tasks]
-    if not rows:
-        return []
-    ids = [r['id'] for r in rows]
-    cur = conn.cursor()
-    assignments, subtasks, deps, comments = {}, {}, {}, {}
-    for chunk in _chunks(ids):
-        ph = ','.join(['%s'] * len(chunk)) if is_pg() else ','.join(['?'] * len(chunk))
-        for r in cur.execute(q(
-                f"SELECT ta.task_id, u.id, u.username FROM task_assignments ta JOIN users u ON ta.user_id = u.id WHERE ta.task_id IN ({ph})",
-                f"SELECT ta.task_id, u.id, u.username FROM task_assignments ta JOIN users u ON ta.user_id = u.id WHERE ta.task_id IN ({ph})"),
-                chunk).fetchall():
-            d = dict(r)
-            assignments.setdefault(d['task_id'], []).append({'id': d['id'], 'username': d['username']})
-        for r in cur.execute(q(
-                f"SELECT task_id, id, title, done FROM subtasks WHERE task_id IN ({ph}) ORDER BY id",
-                f"SELECT task_id, id, title, done FROM subtasks WHERE task_id IN ({ph}) ORDER BY id"),
-                chunk).fetchall():
-            d = dict(r)
-            subtasks.setdefault(d['task_id'], []).append({'id': d['id'], 'title': d['title'], 'done': d['done']})
-        for r in cur.execute(q(
-                f"SELECT task_id, depends_on_id FROM task_dependencies WHERE task_id IN ({ph})",
-                f"SELECT task_id, depends_on_id FROM task_dependencies WHERE task_id IN ({ph})"),
-                chunk).fetchall():
-            d = dict(r)
-            deps.setdefault(d['task_id'], []).append(d['depends_on_id'])
-        for r in cur.execute(q(
-                f"SELECT task_id, COUNT(*) AS c FROM comments WHERE task_id IN ({ph}) GROUP BY task_id",
-                f"SELECT task_id, COUNT(*) AS c FROM comments WHERE task_id IN ({ph}) GROUP BY task_id"),
-                chunk).fetchall():
-            d = dict(r)
-            comments[d['task_id']] = d['c']
-    out = []
-    for d in rows:
-        tid = d['id']
-        d['assigned_users'] = assignments.get(tid, [])
-        d['assignee_count'] = len(d['assigned_users'])
-        d['max_assignees'] = d.get('max_assignees') or 3
-        d['slots_left'] = d['max_assignees'] - d['assignee_count']
-        d['is_claimed_by_me'] = any(u['id'] == user_id for u in d['assigned_users']) if user_id else False
-        d['points'] = d.get('points') or 0
-        d['scope'] = d.get('scope') or 'lang'
-        d['subtasks'] = subtasks.get(tid, [])
-        d['depends_on'] = deps.get(tid, [])
-        d['comment_count'] = comments.get(tid, 0)
-        d['estimate_hours'] = d.get('estimate_hours') or 0
-        d['actual_seconds'] = d.get('actual_seconds') or 0
-        out.append(d)
-    return out
-
-
 def serialize_task(conn, task, user_id=None, role=None):
     d = dict(task)
     d['assigned_users'] = get_task_assignees(conn, task['id'])
@@ -1579,14 +1221,16 @@ def api_tasks():
     role = session.get('role')
     user_id = session['user_id']
 
-    # Moi doan vien deu xem duoc bang viec chung de nhan task (claim).
-    tasks = cur.execute("SELECT * FROM tasks WHERE deleted_at IS NULL ORDER BY created_at DESC").fetchall()
+    if role in 'bithu':
+        tasks = cur.execute("SELECT * FROM tasks WHERE deleted_at IS NULL ORDER BY created_at DESC").fetchall()
+    else:
+        tasks = cur.execute("SELECT * FROM tasks WHERE deleted_at IS NULL ORDER BY created_at DESC").fetchall()
 
     scope = (request.args.get('scope') or '').strip()
     if scope in ('lang', 'xa'):
         tasks = [tk for tk in tasks if dict(tk).get('scope', 'lang') == scope]
 
-    result = serialize_tasks(conn, tasks, user_id)
+    result = [serialize_task(conn, t, user_id, role) for t in tasks]
     conn.close()
     return jsonify(result)
 
@@ -1595,7 +1239,7 @@ def api_tasks():
 @login_required
 @admin_required
 def api_create_task():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json()
     title = data.get('title', '').strip()
     if not title:
         return jsonify({'error': 'Tiêu đề không được để trống'}), 400
@@ -1894,62 +1538,37 @@ def api_ext_sql_sync():
     return jsonify({'message': f"Đã đồng bộ: {len(tasks)} tasks, {len(users)} users, {len(points)} điểm, {len(fins)} giao dịch"})
 
 
-def _uploads_dir():
-    path = os.path.join(BASE_DIR, 'uploads')
-    os.makedirs(path, exist_ok=True)
-    return os.path.realpath(path)
-
-
-def _uploads_path(stored_name):
-    """Duong dan file upload, dam bao luon nam trong thu muc uploads/."""
-    base = os.path.realpath(_uploads_dir())
-    candidate = os.path.realpath(os.path.join(base, stored_name))
-    try:
-        inside = os.path.commonpath([base, candidate]) == base
-    except ValueError:
-        inside = False
-    if not inside or candidate == base:
-        raise ValueError('invalid upload path')
-    return candidate
-
-
-def _read_upload(file):
-    """Doc upload co gioi han, kiem tra extension + magic bytes, lam sach ten."""
-    if file is None or not getattr(file, 'filename', ''):
-        return None, 'Chưa chọn file'
-    original = file.filename
-    ext = original.rsplit('.', 1)[-1].lower() if '.' in original else ''
-    if ext not in ALLOWED_UPLOAD_EXTENSIONS:
-        return None, 'Chỉ hỗ trợ file .pdf, .doc, .docx'
-    raw = file.stream.read(MAX_UPLOAD_BYTES + 1)
-    if len(raw) > MAX_UPLOAD_BYTES:
-        return None, 'File quá lớn (tối đa 20MB)'
-    if not raw:
-        return None, 'File rỗng'
-    if not file_signature_ok(ext, raw[:16]):
-        return None, 'Nội dung file không khớp định dạng .pdf/.doc/.docx'
-    return {'ext': ext, 'raw': raw, 'size': len(raw), 'display': safe_filename(original)}, None
-
-
 @app.route('/api/tasks/import', methods=['POST'])
 @login_required
 @admin_required
 def api_import_tasks_file():
-    upload, upload_error = _read_upload(request.files.get('file'))
-    if upload_error:
-        return jsonify({'error': upload_error}), 400
+    if 'file' not in request.files:
+        return jsonify({'error': 'Không có file'}), 400
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'error': 'Chưa chọn file'}), 400
+
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in ('pdf', 'doc', 'docx'):
+        return jsonify({'error': 'Chỉ hỗ trợ file .pdf, .doc, .docx'}), 400
 
     scope = request.form.get('scope', 'lang') if request.form.get('scope') in ('lang', 'xa') else 'lang'
     priority = request.form.get('priority', 'medium') if request.form.get('priority') in ('low', 'medium', 'high', 'urgent') else 'medium'
 
-    raw = upload['raw']
-    file_size = upload['size']
-    stored_name = f"{secrets.token_hex(4)}_{upload['display']}"
-    file_path = _uploads_path(stored_name)
+    import uuid, os
+    uploads_dir = os.path.join(os.path.dirname(__file__), 'uploads')
+    os.makedirs(uploads_dir, exist_ok=True)
+
+    safe_name = f"{uuid.uuid4().hex[:8]}_{file.filename}"
+    file_path = os.path.join(uploads_dir, safe_name)
+    raw = file.read()
+    if len(raw) > 20 * 1024 * 1024:
+        return jsonify({'error': 'File quá lớn (tối đa 20MB)'}), 400
     with open(file_path, 'wb') as _f:
         _f.write(raw)
+    file_size = len(raw)
 
-    title = os.path.splitext(upload['display'])[0].strip() or upload['display']
+    title = os.path.splitext(file.filename)[0].strip() or file.filename
     if len(title) > 500:
         title = title[:500]
 
@@ -1961,8 +1580,8 @@ def api_import_tasks_file():
         (title, '', 'pending', priority, 3, scope, session['user_id']))
     tid = cur.fetchone()['id'] if is_pg() else cur.lastrowid
 
-    att_url = f"/api/tasks/{tid}/file/{stored_name}"
-    _save_attachment(cur, tid, upload['display'], att_url, file_size, raw, session['user_id'])
+    att_url = f"/api/tasks/{tid}/file/{safe_name}"
+    _save_attachment(cur, tid, file.filename, att_url, file_size, raw, session['user_id'])
     conn.commit()
     conn.close()
 
@@ -1973,6 +1592,16 @@ def api_import_tasks_file():
 @login_required
 @admin_required
 def api_upload_task_file(task_id):
+    if 'file' not in request.files:
+        return jsonify({'error': 'Không có file'}), 400
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'error': 'Chưa chọn file'}), 400
+
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in ('pdf', 'doc', 'docx'):
+        return jsonify({'error': 'Chỉ hỗ trợ file .pdf, .doc, .docx'}), 400
+
     conn = get_db()
     cur = conn.cursor()
     task = cur.execute(q("SELECT id FROM tasks WHERE id = %s", "SELECT id FROM tasks WHERE id = ?"), (task_id,)).fetchone()
@@ -1980,23 +1609,25 @@ def api_upload_task_file(task_id):
         conn.close()
         return jsonify({'error': 'Task không tồn tại'}), 404
 
-    upload, upload_error = _read_upload(request.files.get('file'))
-    if upload_error:
-        conn.close()
-        return jsonify({'error': upload_error}), 400
+    import uuid, os
+    uploads_dir = os.path.join(os.path.dirname(__file__), 'uploads')
+    os.makedirs(uploads_dir, exist_ok=True)
 
-    raw = upload['raw']
-    file_size = upload['size']
-    stored_name = f"{secrets.token_hex(4)}_{upload['display']}"
-    file_path = _uploads_path(stored_name)
+    safe_name = f"{uuid.uuid4().hex[:8]}_{file.filename}"
+    file_path = os.path.join(uploads_dir, safe_name)
+    raw = file.read()
+    if len(raw) > 20 * 1024 * 1024:
+        conn.close()
+        return jsonify({'error': 'File quá lớn (tối đa 20MB)'}), 400
     with open(file_path, 'wb') as _f:
         _f.write(raw)
+    file_size = len(raw)
 
-    att_url = f"/api/tasks/{task_id}/file/{stored_name}"
-    _save_attachment(cur, task_id, upload['display'], att_url, file_size, raw, session['user_id'])
+    att_url = f"/api/tasks/{task_id}/file/{safe_name}"
+    _save_attachment(cur, task_id, file.filename, att_url, file_size, raw, session['user_id'])
     conn.commit()
     conn.close()
-    return jsonify({'message': f'Đã đính kèm file "{upload["display"]}"', 'url': att_url}), 201
+    return jsonify({'message': f'Đã đính kèm file "{file.filename}"', 'url': att_url}), 201
 
 
 @app.route('/api/tasks/<int:task_id>/file/<path:filename>')
@@ -2032,31 +1663,21 @@ def api_serve_file(task_id, filename):
             orig = safe
         ascii_name = (safe.encode('ascii', 'ignore').decode('ascii').strip() or 'file').replace('"', '')
         disp = f'inline; filename="{ascii_name}"; filename*=UTF-8\'\'{_quote(orig)}'
-        return Response(blob, mimetype=mime, headers={
-            'Content-Disposition': disp,
-            'Cache-Control': 'private, no-store',
-            'Cross-Origin-Resource-Policy': 'same-origin',
-        })
+        return Response(blob, mimetype=mime, headers={'Content-Disposition': disp})
     # 2) Disk fallback (older uploads still on disk)
-    try:
-        file_path = _uploads_path(safe)
-    except ValueError:
-        return jsonify({'error': 'Tên file không hợp lệ'}), 400
+    file_path = _os.path.join(uploads_dir, safe)
     if not _os.path.isfile(file_path):
         return jsonify({'error': 'File không tồn tại'}), 404
 
     from flask import send_file
-    resp = send_file(file_path, mimetype=mime, as_attachment=False, download_name=safe)
-    resp.headers['Cache-Control'] = 'private, no-store'
-    resp.headers['Cross-Origin-Resource-Policy'] = 'same-origin'
-    return resp
+    return send_file(file_path, mimetype=mime, as_attachment=False, download_name=safe)
 
 
 @app.route('/api/tasks/<int:task_id>', methods=['PUT'])
 @login_required
 @admin_required
 def api_update_task(task_id):
-    data = request.get_json(silent=True) or {}
+    data = request.get_json()
     conn = get_db()
     cur = conn.cursor()
     task = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
@@ -2309,8 +1930,8 @@ def api_time_log(task_id):
         secs = max(0, int(data.get('seconds', 0) or 0))
     except Exception:
         secs = 0
-    if secs <= 0 or secs > 86400:
-        return jsonify({'error': 'Số giây không hợp lệ (0-86400)'}), 400
+    if secs <= 0:
+        return jsonify({'error': 'Số giây không hợp lệ'}), 400
     conn = get_db()
     cur = conn.cursor()
     cur.execute(q("INSERT INTO time_logs (task_id, user_id, seconds, note) VALUES (%s, %s, %s, %s)",
@@ -2333,7 +1954,7 @@ def api_tasks_bulk():
     ph = ','.join(['%s'] * len(ids)) if is_pg() else ','.join(['?'] * len(ids))
     conn = get_db()
     cur = conn.cursor()
-    if not is_admin():
+    if session.get('role') != 'bithu':
         rows = cur.execute(f"SELECT task_id FROM task_assignments WHERE user_id = %s AND task_id IN ({ph})" if is_pg()
                            else f"SELECT task_id FROM task_assignments WHERE user_id = ? AND task_id IN ({ph})",
                            ([session['user_id']] + ids)).fetchall()
@@ -2346,7 +1967,7 @@ def api_tasks_bulk():
         cur.execute(f"UPDATE tasks SET status = %s WHERE id IN ({ph})" if is_pg()
                     else f"UPDATE tasks SET status = ? WHERE id IN ({ph})",
                     ([data['status']] + ids))
-    if data.get('assign_to') is not None and is_admin():
+    if data.get('assign_to') is not None:
         try:
             uid = int(data['assign_to'])
             for tid in ids:
@@ -2364,7 +1985,7 @@ def api_tasks_bulk():
                               "INSERT INTO task_assignments (task_id, user_id) VALUES (?, ?)"), (tid, session['user_id']))
             except Exception:
                 pass
-    if data.get('delete') and is_admin():
+    if data.get('delete'):
         cur.execute(f"UPDATE tasks SET deleted_at = NOW() WHERE id IN ({ph})" if is_pg()
                     else f"UPDATE tasks SET deleted_at = CURRENT_TIMESTAMP WHERE id IN ({ph})", ids)
         conn.commit()
@@ -2497,18 +2118,20 @@ def api_share_delete(token):
 def share_page(token):
     conn = get_db()
     cur = conn.cursor()
-    sh = cur.execute(q("SELECT * FROM shares WHERE token = %s", "SELECT * FROM shares WHERE token = ?"),
-                     (token,)).fetchone()
+    sh = cur.execute(q("SELECT * FROM shares WHERE token = %s", "SELECT * FROM shares WHERE token = ?"), (token,)).fetchone()
     if not sh:
         conn.close()
-        return render_template('share_gone.html'), 404
+        return 'Link không tồn tại', 404
     tasks = cur.execute("SELECT id, title, description, status, priority, due_date FROM tasks WHERE deleted_at IS NULL ORDER BY created_at DESC").fetchall()
     conn.close()
+    rows = ''.join([f"<tr><td>{dict(t).get('title','')}</td><td>{dict(t).get('status','')}</td><td>{dict(t).get('due_date') or ''}</td></tr>" for t in tasks])
     mode = dict(sh).get('mode', 'view')
-    resp = Response(render_template('share.html', tasks=[dict(t) for t in tasks], mode=mode))
-    resp.headers['Cache-Control'] = 'private, no-store'
-    resp.headers['X-Robots-Tag'] = 'noindex, nofollow'
-    return resp
+    comment_box = ''
+    if mode == 'comment':
+        comment_box = '<p style="color:#888">Link này cho phép bình luận (liên hệ Bí thư để gửi nhận xét).</p>'
+    return f"""<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tiến độ - Đoàn TN thôn Lam Khê</title>
+<style>body{{font-family:system-ui;background:#0a0a0f;color:#eee;margin:0;padding:24px}}table{{width:100%;border-collapse:collapse}}td,th{{border:1px solid #333;padding:8px;text-align:left}}th{{background:#1a1a24}}</style></head>
+<body><h2>Tiến độ công việc - Đoàn TN thôn Lam Khê</h2>{comment_box}<table><tr><th>Nhiệm vụ</th><th>Trạng thái</th><th>Hạn</th></tr>{rows}</table></body></html>"""
 
 
 @app.route('/api/tasks/<int:task_id>/attachments', methods=['GET', 'POST'])
@@ -2525,16 +2148,13 @@ def api_attachments(task_id):
         except Exception:
             conn.close()
             return jsonify([])
-    data = request.get_json(silent=True) or {}
+    data = request.get_json() or {}
     url = (data.get('url') or '').strip()
     note = (data.get('note') or '')[:500]
     name = (data.get('filename') or url or 'link')[:200]
     if not url:
         conn.close()
         return jsonify({'error': 'Thiếu link'}), 400
-    if not is_safe_link_url(url):
-        conn.close()
-        return jsonify({'error': 'Link phải là http(s) hoặc đường dẫn nội bộ'}), 400
     cur.execute(q("INSERT INTO attachments (task_id, filename, url, note, size, created_by) VALUES (%s, %s, %s, %s, %s, %s)",
                   "INSERT INTO attachments (task_id, filename, url, note, size, created_by) VALUES (?, ?, ?, ?, ?, ?)"),
                 (task_id, name, url, note, 0, session['user_id']))
@@ -2550,7 +2170,7 @@ def api_attachments(task_id):
 def api_claim_task(task_id):
     conn = get_db()
     cur = conn.cursor()
-    task = _lock_task(conn, task_id)
+    task = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
     if not task:
         conn.close()
         return jsonify({'error': 'Task không tồn tại'}), 404
@@ -2603,7 +2223,7 @@ def api_unclaim_task(task_id):
         conn.close()
         return jsonify({'error': 'Task không tồn tại'}), 404
 
-    if not is_admin():
+    if session['role'] not in 'bithu':
         own = cur.execute(q("SELECT 1 FROM task_assignments WHERE task_id = %s AND user_id = %s",
                             "SELECT 1 FROM task_assignments WHERE task_id = ? AND user_id = ?"),
                           (task_id, session['user_id'])).fetchone()
@@ -2612,8 +2232,8 @@ def api_unclaim_task(task_id):
             return jsonify({'error': 'Bạn chưa nhận task này'}), 400
 
     target_user = session['user_id']
-    if is_admin() and request.is_json:
-        target_user = (request.get_json(silent=True) or {}).get('user_id', session['user_id'])
+    if session['role'] in 'bithu' and request.is_json:
+        target_user = request.get_json().get('user_id', session['user_id'])
 
     cur.execute(q("DELETE FROM task_assignments WHERE task_id = %s AND user_id = %s",
                   "DELETE FROM task_assignments WHERE task_id = ? AND user_id = ?"), (task_id, target_user))
@@ -2635,19 +2255,19 @@ def api_unclaim_task(task_id):
 @app.route('/api/tasks/<int:task_id>/status', methods=['PUT'])
 @login_required
 def api_update_status(task_id):
-    data = request.get_json(silent=True) or {}
+    data = request.get_json()
     new_status = data.get('status')
     if new_status not in ('pending', 'in_progress', 'done'):
         return jsonify({'error': 'Trạng thái không hợp lệ'}), 400
 
     conn = get_db()
     cur = conn.cursor()
-    task = _lock_task(conn, task_id)
+    task = cur.execute(q("SELECT * FROM tasks WHERE id = %s", "SELECT * FROM tasks WHERE id = ?"), (task_id,)).fetchone()
     if not task:
         conn.close()
         return jsonify({'error': 'Task không tồn tại'}), 404
 
-    if not is_admin():
+    if session['role'] not in 'bithu':
         assigned = cur.execute(q("SELECT 1 FROM task_assignments WHERE task_id = %s AND user_id = %s",
                                 "SELECT 1 FROM task_assignments WHERE task_id = ? AND user_id = ?"),
                               (task_id, session['user_id'])).fetchone()
@@ -2739,7 +2359,7 @@ def api_points_list():
 @app.route('/api/points/<int:user_id>')
 @login_required
 def api_points_detail(user_id):
-    if not is_admin() and session['user_id'] != user_id:
+    if session['role'] not in 'bithu' and session['user_id'] != user_id:
         return jsonify({'error': 'Không có quyền'}), 403
     conn = get_db()
     cur = conn.cursor()
@@ -2760,7 +2380,7 @@ def api_points_detail(user_id):
 @login_required
 @admin_required
 def api_add_points():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json()
     user_id = data.get('user_id')
     points = data.get('points', 0)
     reason = data.get('reason', '').strip()
@@ -2812,13 +2432,11 @@ def api_fund_get():
 @login_required
 @admin_required
 def api_fund_update():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json()
     amount = data.get('amount', 0)
     try:
         amount = float(amount)
     except (ValueError, TypeError):
-        return jsonify({'error': 'Số tiền không hợp lệ'}), 400
-    if not math.isfinite(amount):
         return jsonify({'error': 'Số tiền không hợp lệ'}), 400
     conn = get_db()
     cur = conn.cursor()
@@ -2838,13 +2456,13 @@ def api_fund_update():
 @login_required
 @admin_required
 def api_fund_set():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json()
     amount = data.get('amount', 0)
     try:
         amount = float(amount)
     except (ValueError, TypeError):
         return jsonify({'error': 'Số tiền không hợp lệ'}), 400
-    if not math.isfinite(amount) or amount < 0:
+    if amount < 0:
         return jsonify({'error': 'Số tiền phải >= 0'}), 400
     conn = get_db()
     cur = conn.cursor()
@@ -2890,7 +2508,7 @@ def api_finance_summary():
 @login_required
 @admin_required
 def api_finance_create():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json()
     trans_type = data.get('type')
     amount = data.get('amount', 0)
     description = data.get('description', '').strip()
@@ -2902,7 +2520,7 @@ def api_finance_create():
         amount = float(amount)
     except (ValueError, TypeError):
         return jsonify({'error': 'Số tiền không hợp lệ'}), 400
-    if not math.isfinite(amount) or amount <= 0:
+    if amount <= 0:
         return jsonify({'error': 'Số tiền phải lớn hơn 0'}), 400
 
     conn = get_db()
@@ -2910,13 +2528,12 @@ def api_finance_create():
 
     if trans_type == 'expense':
         fund = get_fund(conn)
-        cur.execute(q("UPDATE fund SET balance = balance - %s, updated_at = NOW() WHERE id = %s AND balance >= %s",
-                      "UPDATE fund SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND balance >= ?"),
-                    (amount, fund['id'], amount))
-        if cur.rowcount == 0:
-            conn.rollback()
+        if fund['balance'] < amount:
             conn.close()
             return jsonify({'error': f'Quỹ không đủ. Số dư quỹ: {int(fund["balance"]):,} VND'}), 400
+        cur.execute(q("UPDATE fund SET balance = balance - %s, updated_at = NOW() WHERE id = %s",
+                      "UPDATE fund SET balance = balance - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"),
+                    (amount, fund['id']))
     elif trans_type == 'income':
         fund = get_fund(conn)
         cur.execute(q("UPDATE fund SET balance = balance + %s, updated_at = NOW() WHERE id = %s",
